@@ -461,6 +461,26 @@ textarea.body-edit:focus { outline: none; border-color: var(--accent); }
   background: var(--bg-2);
 }
 
+/* ─── Skill picker (used in New Topic modal) ───────── */
+.skill-picker {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 240px; overflow-y: auto;
+  padding: 6px 0;
+}
+.skill-picker .row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.skill-picker .row:hover { background: var(--panel-3); }
+.skill-picker .row input[type="checkbox"] { margin: 0; cursor: pointer; }
+.skill-picker .row .name { flex: 1; }
+.skill-picker .row .existing-tags { color: var(--text-faint); font-size: 11px; font-family: var(--mono); }
+.skill-picker .empty { padding: 18px 12px; color: var(--text-muted); text-align: center; font-size: 13px; }
+
 /* ─── Tag editor chips (with remove ×) ─────────────── */
 .tag-editor { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
 .tag-editor .chip { padding-right: 6px; }

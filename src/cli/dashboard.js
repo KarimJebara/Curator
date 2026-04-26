@@ -98,9 +98,19 @@ const handle = async (req, res) => {
     // Strip raw/body bloat from the list payload — the dashboard fetches
     // the full content per-skill via /api/skills/:name only when the user
     // opens one. Cuts initial load by ~10x on a 100-skill setup.
+    // Compute tag membership per skill from the topic detector output so the
+    // frontend can search by tag without needing each skill's full frontmatter.
+    const tagsByName = new Map();
+    for (const t of state.topics || []) {
+      for (const m of t.members || []) {
+        if (!tagsByName.has(m.name)) tagsByName.set(m.name, []);
+        tagsByName.get(m.name).push(t.tag);
+      }
+    }
     const skills = (state.skills || []).map(({ raw, body, frontmatter, ...rest }) => ({
       ...rest,
       hasFrontmatterTags: !!(frontmatter && frontmatter.tags),
+      tags: tagsByName.get(rest.name) || [],
       editable: isEditable(rest.dir),
     }));
     const totals = skills.reduce(

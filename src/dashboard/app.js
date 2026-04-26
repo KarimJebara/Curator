@@ -112,10 +112,15 @@ const filterSkills = () => {
     list = list.filter((s) => !tagged.has(s.name));
   }
   if (q) {
-    list = list.filter((s) =>
-      s.name.toLowerCase().includes(q) ||
-      (s.description || '').toLowerCase().includes(q)
-    );
+    list = list.filter((s) => {
+      if (s.name.toLowerCase().includes(q)) return true;
+      if ((s.description || '').toLowerCase().includes(q)) return true;
+      // Match by tag — supports "kotlin", "/kotlin", "tag:kotlin", and
+      // partial-match (e.g. "kub" hits "kubernetes")
+      const tagQuery = q.replace(/^[/]+|^tag:/, '');
+      if ((s.tags || []).some((t) => t.toLowerCase().includes(tagQuery))) return true;
+      return false;
+    });
   }
   return list.sort((a, b) => (b.lazyTokens || 0) - (a.lazyTokens || 0));
 };
@@ -662,6 +667,98 @@ const saveTags = async (skill, tags) => {
   } catch (e) { toast(e.message, 'error'); }
 };
 
+/* ─── New topic modal ──────────────────────────────── */
+
+const topicState = { selected: new Set(), filter: '' };
+
+const renderTopicSkillPicker = () => {
+  const list = $('#topicSkillList');
+  list.innerHTML = '';
+  const filter = topicState.filter.toLowerCase();
+  const candidates = state.skills
+    .filter((s) => s.editable)
+    .filter((s) => !filter || s.name.toLowerCase().includes(filter) || (s.description || '').toLowerCase().includes(filter))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!candidates.length) {
+    list.appendChild(el('div', { class: 'empty' }, 'No editable skills match.'));
+    return;
+  }
+  for (const s of candidates) {
+    const checked = topicState.selected.has(s.name);
+    const row = el('label', { class: 'row' });
+    const cb = el('input', { type: 'checkbox' });
+    cb.checked = checked;
+    cb.addEventListener('change', () => {
+      if (cb.checked) topicState.selected.add(s.name);
+      else topicState.selected.delete(s.name);
+      $('#topicSelCount').textContent = `(${topicState.selected.size} selected)`;
+    });
+    row.appendChild(cb);
+    row.appendChild(el('span', { class: 'name' }, s.name));
+    if ((s.tags || []).length) {
+      row.appendChild(el('span', { class: 'existing-tags' }, s.tags.slice(0, 3).join(' · ')));
+    }
+    list.appendChild(row);
+  }
+};
+
+const openTopicModal = () => {
+  topicState.selected.clear();
+  topicState.filter = '';
+  $('#topicTagInput').value = '';
+  $('#topicSkillFilter').value = '';
+  $('#topicSelCount').textContent = '(0 selected)';
+  renderTopicSkillPicker();
+  $('#topicModal').classList.remove('hidden');
+  setTimeout(() => $('#topicTagInput').focus(), 50);
+};
+const closeTopicModal = () => $('#topicModal').classList.add('hidden');
+
+const submitTopic = async () => {
+  const tag = $('#topicTagInput').value.trim().toLowerCase().replace(/^[/]+|^tag:/, '');
+  if (!/^[a-z][a-z0-9-]{1,30}$/.test(tag)) {
+    return toast('Tag must be 2–31 chars, lowercase, alphanumeric + hyphens', 'error');
+  }
+  if (topicState.selected.size === 0) {
+    return toast('Pick at least one skill to tag', 'error');
+  }
+
+  // Tag each selected skill. We need each skill's current tags so we can
+  // append rather than overwrite. Fetch them in parallel.
+  const names = [...topicState.selected];
+  try {
+    const skills = await Promise.all(names.map((n) => api(`/api/skills/${encodeURIComponent(n)}`)));
+    for (const s of skills) {
+      const existing = parseTagsField(s.frontmatter?.tags);
+      if (existing.includes(tag)) continue;
+      const next = [...existing, tag];
+      await api(`/api/skills/${encodeURIComponent(s.name)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ frontmatter: { tags: next.join(', ') } }),
+      });
+    }
+    closeTopicModal();
+    const data = await api('/api/state');
+    Object.assign(state, {
+      skills: data.skills,
+      topics: data.topics,
+      clusters: data.clusters,
+      mcpServers: data.mcpServers || [],
+      totals: data.totals || state.totals,
+    });
+    renderSidebar();
+    renderList();
+    renderDetail();
+    const newTopic = state.topics.find((t) => t.tag === tag);
+    if (newTopic) {
+      toast(`Topic /${tag} now has ${newTopic.members.length} skills`);
+      setFilter('topic', tag);
+    } else {
+      toast(`Tagged ${names.length} skills with ${tag}. Topic appears in sidebar at 3+ members.`);
+    }
+  } catch (e) { toast(e.message, 'error'); }
+};
+
 /* ─── New skill modal ──────────────────────────────── */
 
 const openNewSkillModal = () => {
@@ -864,6 +961,21 @@ $('#modalCloseBtn').addEventListener('click', closeModal);
 $('#modalCancelBtn').addEventListener('click', closeModal);
 $('#modalCreateBtn').addEventListener('click', submitNewSkill);
 $('#modal').addEventListener('click', (ev) => { if (ev.target.id === 'modal') closeModal(); });
-document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeModal(); });
+
+$('#newTopicBtn').addEventListener('click', openTopicModal);
+$('#topicModalCloseBtn').addEventListener('click', closeTopicModal);
+$('#topicCancelBtn').addEventListener('click', closeTopicModal);
+$('#topicCreateBtn').addEventListener('click', submitTopic);
+$('#topicSkillFilter').addEventListener('input', (ev) => {
+  topicState.filter = ev.target.value;
+  renderTopicSkillPicker();
+});
+$('#topicModal').addEventListener('click', (ev) => { if (ev.target.id === 'topicModal') closeTopicModal(); });
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  closeModal();
+  closeTopicModal();
+});
 
 init();

@@ -91,8 +91,10 @@ export const tests = {
     assert.equal(body.skills.length, 1);
     assert.equal(body.skills[0].name, 'demo-skill');
     assert.ok('eagerTokens' in body.skills[0], 'skill row should expose eagerTokens');
+    assert.ok(Array.isArray(body.skills[0].tags), 'skill row should expose tags array');
     assert.ok('totals' in body, 'state should expose totals');
     assert.equal(typeof body.totals.eager, 'number');
+    assert.equal(typeof body.totals.mcp, 'number');
   },
 
   'GET /api/skills/:name returns full skill content': async () => {

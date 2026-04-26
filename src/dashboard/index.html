@@ -12,7 +12,8 @@
       <span class="brand-dot"></span>
       curator
     </div>
-    <input id="search" type="search" placeholder="Search skills by name or description…" autocomplete="off" />
+    <input id="search" type="search" placeholder="Search by name, description, or tag (try “kotlin”)…" autocomplete="off" />
+    <button id="newTopicBtn" class="btn" type="button">+ New topic</button>
     <button id="newSkillBtn" class="btn primary" type="button">+ New skill</button>
     <div class="counts" id="counts"></div>
   </header>
@@ -52,6 +53,32 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+
+  <div id="topicModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>New topic</h2>
+        <button class="modal-close" id="topicModalCloseBtn" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <label>
+          <span>Topic tag</span>
+          <input id="topicTagInput" type="text" placeholder="frontend" autocomplete="off" />
+          <small>Lowercase. Becomes the <code>tags:</code> entry in each selected skill's frontmatter. Topics emerge in the sidebar when 3+ skills share the tag.</small>
+        </label>
+        <label>
+          <span>Skills to tag <em id="topicSelCount">(0 selected)</em></span>
+          <input id="topicSkillFilter" type="text" placeholder="Filter user-owned skills…" autocomplete="off" />
+          <div id="topicSkillList" class="skill-picker"></div>
+          <small>Plugin-installed skills can't be tagged from the UI (read-only).</small>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="topicCancelBtn" type="button">Cancel</button>
+        <button class="btn primary" id="topicCreateBtn" type="button">Tag selected</button>
+      </div>
+    </div>
+  </div>
 
   <div id="modal" class="modal-backdrop hidden">
     <div class="modal">
