@@ -179,9 +179,20 @@ From a real scan of the author's library:
 | Topics auto-detected | 29 |
 | Clusters detected | 19 |
 | MCP servers | 22 (0 duplicate groups) |
+| MCP tool definitions (max upfront, if Tool Search disabled) | ~70,000 |
 | Default scan time | ~3 seconds |
 
 The 3,639-token "always loaded" number is what's actually in the autorouter
 context on every session. The 243k figure is the *potential* on-invocation
 cost, not the always-on cost. Lead with the always-loaded number — it's the
 smaller, more accurate, more honest framing.
+
+**Important framing note re: MCP tokens.** Claude Code 2.1.7+ ships with MCP
+Tool Search **on by default**. That means the ~70k of MCP tool definitions
+are *deferred* — only the tool names load up-front; full schemas are pulled
+in on demand when Claude actually invokes a tool. So the dashboard's MCP
+total is the *upper bound* if Tool Search is disabled, not the per-session
+cost. Do **not** post a "MCPs cost N× more than skill descriptions" hook —
+it's misleading and a savvy commenter will fact-check it. The honest framing
+is: "the dashboard surfaces what your *potential* MCP cost would be, plus
+your real always-loaded skill-description cost — both worth seeing."

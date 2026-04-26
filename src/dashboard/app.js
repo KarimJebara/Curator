@@ -306,7 +306,7 @@ const renderOverview = () => {
   const hero = el('section', { class: 'hero' },
     el('h1', {}, 'Your skill library at a glance'),
     el('div', { class: 'hero-sub' },
-      `${state.skills.length} skills. About ${fmt(eagerTotal)} tokens of skill descriptions are loaded into Claude on every session — paid whether you use the skill or not. ` +
+      `${state.skills.length} skills. About ${fmt(eagerTotal)} tokens of skill descriptions get loaded into Claude on every session so the autorouter can decide what to invoke — paid whether you use the skill or not. ` +
       `Another ${fmt(lazyTotal)} tokens of skill bodies sit on disk and only load when a skill actually fires. ` +
       `Pick a topic, cluster, or skill from the left — or scan the highlights below.`),
     el('div', { class: 'hero-stats' },
@@ -321,20 +321,19 @@ const renderOverview = () => {
   // Cost-comparison callout: eager skill descriptions vs MCP tool envelopes.
   // MCP cost is usually 5–20× the skill-description cost — surfacing the
   // ratio is the most actionable single number on the page.
-  if (state.totals.mcp && state.totals.eager) {
-    const ratio = state.totals.mcp / state.totals.eager;
-    if (ratio >= 2) {
-      inner.appendChild(el('div', { class: 'callout' },
-        el('div', { class: 'icon' }, '!'),
-        el('div', { class: 'body' },
-          el('div', { class: 'title' }, `Your MCP servers cost ${ratio.toFixed(1)}× more than your skill descriptions`),
-          el('div', { class: 'detail' },
-            `${fmt(state.totals.mcp)} tokens for MCP tool definitions vs ${fmt(state.totals.eager)} tokens for skill descriptions — both loaded into Claude on every session. ` +
-            `Trimming MCP servers you don't actually use is the highest-leverage cleanup.`,
-          ),
+  if (state.totals.mcp) {
+    inner.appendChild(el('div', { class: 'callout' },
+      el('div', { class: 'icon' }, 'i'),
+      el('div', { class: 'body' },
+        el('div', { class: 'title' }, `MCP cost: ${fmt(state.totals.mcp)} tokens of tool definitions across ${state.mcpServers.length} servers`),
+        el('div', { class: 'detail' },
+          `Claude Code 2.1.7+ defers these by default (MCP Tool Search): only the tool names load up-front, ` +
+          `and schemas are pulled in on demand when Claude actually invokes a tool. ` +
+          `So the ${fmt(state.totals.mcp)} above is the upper bound — not your real per-session cost. ` +
+          `It only becomes a per-session cost if you set ENABLE_TOOL_SEARCH=false.`,
         ),
-      ));
-    }
+      ),
+    ));
   }
 
   // Row 1: Eager + Lazy heaviest charts
@@ -386,7 +385,7 @@ const renderOverview = () => {
         )),
       ),
     ),
-    card('MCP servers', `${state.mcpServers.length} · ${fmt(state.totals.mcp || 0)} tok`,
+    card('MCP servers', `${state.mcpServers.length} · ${fmt(state.totals.mcp || 0)} tok max (Tool Search defers these)`,
       el('div', {},
         ...(() => {
           const sorted = [...state.mcpServers].sort((a, b) => (b.tokens || 0) - (a.tokens || 0)).slice(0, 8);
@@ -866,13 +865,18 @@ const renderMcpDetail = () => {
     ),
   ));
 
-  inner.appendChild(card('Token cost', 'always loaded — paid every session',
+  inner.appendChild(card('Token cost', 'max upfront — Tool Search defers most of this',
     el('div', { style: 'font-size: 13px; line-height: 1.7' },
-      el('div', {}, `Loaded into Claude on every session: ${fmt(m.tokens)} tokens`),
-      el('div', { style: 'color: var(--text-muted)' },
+      el('div', {}, `${fmt(m.tokens)} tokens of tool definitions in this server's schema.`),
+      el('div', { style: 'color: var(--text-muted); margin-top: 6px;' },
+        'In Claude Code 2.1.7+, MCP Tool Search is on by default — tool schemas load on demand, ' +
+        'not at session start. So this number is the upper bound (what you\'d pay if Tool Search ' +
+        'were disabled), not your real per-session cost.',
+      ),
+      el('div', { style: 'color: var(--text-muted); margin-top: 6px;' },
         m.tokensSource === 'known'
           ? 'Source: curated estimate for this server. Order-of-magnitude accurate, not measured live.'
-          : 'Source: envelope estimate (server name not in our known-server table). Likely under-counts servers with rich tool schemas — we\'d need to probe the server live for an accurate number.',
+          : 'Source: envelope estimate (server name not in our known-server table). Likely under-counts.',
       ),
     ),
   ));
