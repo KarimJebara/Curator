@@ -1,0 +1,654 @@
+const state = {
+  skills: [],
+  topics: [],
+  clusters: [],
+  mcpServers: [],
+  totals: { eager: 0, lazy: 0, all: 0 },
+  filter: { kind: 'all', value: null },
+  query: '',
+  selected: null,
+  editing: false,
+  clusterDetail: null, // { cluster, members, overlap } or null
+};
+
+const $ = (sel) => document.querySelector(sel);
+const el = (tag, props = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') node.className = v;
+    else if (k === 'html') node.innerHTML = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else if (k === 'dataset') Object.assign(node.dataset, v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children) {
+    if (c == null || c === false) continue;
+    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return node;
+};
+
+const api = async (path, opts = {}) => {
+  const res = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  return body;
+};
+
+const toast = (msg, kind = 'ok', ms = 2400) => {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = `toast ${kind}`;
+  setTimeout(() => { t.className = 'toast hidden'; }, ms);
+};
+
+const fmt = (n) => Number(n || 0).toLocaleString();
+const silhClass = (s) => (s >= 0.28 ? 'high' : s >= 0.18 ? 'medium' : 'low');
+
+/* ─── Sidebar ──────────────────────────────────────── */
+
+const renderSidebar = () => {
+  // Counts
+  const editable = state.skills.filter((s) => s.editable).length;
+  const tagged = new Set(state.topics.flatMap((t) => t.members.map((m) => m.name)));
+  const untagged = state.skills.filter((s) => !tagged.has(s.name)).length;
+  $('#cAll').textContent = state.skills.length;
+  $('#cUser').textContent = editable;
+  $('#cPlugin').textContent = state.skills.length - editable;
+  $('#cOrphan').textContent = untagged;
+
+  const topicsEl = $('#topics');
+  topicsEl.innerHTML = '';
+  for (const t of state.topics) {
+    const btn = el('button', {
+      class: 'filter-btn' + (state.filter.kind === 'topic' && state.filter.value === t.tag ? ' active' : ''),
+      onclick: () => setFilter('topic', t.tag),
+    }, `/${t.tag}`, el('span', { class: 'count' }, String(t.members.length)));
+    topicsEl.appendChild(el('li', {}, btn));
+  }
+
+  const clustersEl = $('#clusters');
+  clustersEl.innerHTML = '';
+  for (const c of state.clusters) {
+    const sil = (c.silhouette ?? 0).toFixed(2);
+    const btn = el('button', {
+      class: 'filter-btn' + (state.clusterDetail && state.clusterDetail.cluster.id === c.id ? ' active' : ''),
+      onclick: () => showClusterDetail(c.id),
+    }, c.label, el('span', { class: `silhouette ${silhClass(c.silhouette || 0)}` }, sil));
+    clustersEl.appendChild(el('li', {}, btn));
+  }
+
+  for (const btn of document.querySelectorAll('.filter-btn[data-filter]')) {
+    btn.classList.toggle('active', state.filter.kind === btn.dataset.filter);
+    btn.onclick = () => setFilter(btn.dataset.filter, null);
+  }
+};
+
+/* ─── List pane ────────────────────────────────────── */
+
+const filterSkills = () => {
+  const q = state.query.trim().toLowerCase();
+  let list = state.skills;
+  if (state.filter.kind === 'topic') {
+    const t = state.topics.find((x) => x.tag === state.filter.value);
+    if (t) {
+      const names = new Set(t.members.map((m) => m.name));
+      list = list.filter((s) => names.has(s.name));
+    }
+  } else if (state.filter.kind === 'cluster') {
+    const c = state.clusters.find((x) => x.id === state.filter.value);
+    if (c) {
+      const names = new Set(c.members.map((m) => m.name));
+      list = list.filter((s) => names.has(s.name));
+    }
+  } else if (state.filter.kind === 'user') {
+    list = list.filter((s) => s.editable);
+  } else if (state.filter.kind === 'plugin') {
+    list = list.filter((s) => !s.editable);
+  } else if (state.filter.kind === 'orphans') {
+    const tagged = new Set(state.topics.flatMap((t) => t.members.map((m) => m.name)));
+    list = list.filter((s) => !tagged.has(s.name));
+  }
+  if (q) {
+    list = list.filter((s) =>
+      s.name.toLowerCase().includes(q) ||
+      (s.description || '').toLowerCase().includes(q)
+    );
+  }
+  return list.sort((a, b) => (b.lazyTokens || 0) - (a.lazyTokens || 0));
+};
+
+const headerLabel = () => {
+  const f = state.filter;
+  if (f.kind === 'topic') return `Topic: /${f.value}`;
+  if (f.kind === 'cluster') {
+    const c = state.clusters.find((x) => x.id === f.value);
+    return `Cluster: ${c ? c.label : f.value}`;
+  }
+  if (f.kind === 'user') return 'User-owned skills';
+  if (f.kind === 'plugin') return 'Plugin skills';
+  if (f.kind === 'orphans') return 'Untagged skills';
+  return 'All skills';
+};
+
+const renderList = () => {
+  const list = filterSkills();
+  const totalEager = list.reduce((a, s) => a + (s.eagerTokens || 0), 0);
+  const totalLazy = list.reduce((a, s) => a + (s.lazyTokens || 0), 0);
+  const maxTokens = Math.max(1, ...list.map((s) => s.lazyTokens || 0));
+  $('#listHeader').textContent = headerLabel();
+  $('#listSubheader').textContent = `${list.length} · ${fmt(totalEager)} eager · ${fmt(totalLazy)} lazy`;
+
+  const ul = $('#skillList');
+  ul.innerHTML = '';
+  for (const s of list) {
+    const isActive = state.selected && state.selected.name === s.name;
+    const tokenPct = ((s.lazyTokens || 0) / maxTokens) * 100;
+    const li = el('li', {
+      class: isActive ? 'active' : '',
+      onclick: () => selectSkill(s.name),
+    },
+      el('div', { class: 'name' }, s.name),
+      el('div', { class: 'desc' }, s.description || '(no description)'),
+      el('div', { class: 'meta' },
+        el('span', {
+          class: `badge ${s.eagerGrade || ''}`,
+          title: 'Eager — description tokens, always loaded',
+        }, `${fmt(s.eagerTokens)}e`),
+        el('span', {
+          class: `badge ${s.grade || ''}`,
+          title: 'Lazy — body tokens, loaded only on invocation',
+        }, `${fmt(s.lazyTokens)}L`),
+        el('div', { class: 'token-bar' }, el('span', { style: `width: ${tokenPct}%` })),
+        s.editable ? null : el('span', { class: 'badge readonly' }, 'plugin'),
+      ),
+    );
+    ul.appendChild(li);
+  }
+
+  $('#counts').innerHTML = `<span><strong>${state.skills.length}</strong> skills</span><span><strong>${state.topics.length}</strong> topics</span><span><strong>${state.clusters.length}</strong> clusters</span>`;
+};
+
+/* ─── Detail pane: skill view ──────────────────────── */
+
+const renderSkillDetail = () => {
+  const pane = $('#detail');
+  const s = state.selected;
+  pane.innerHTML = '';
+
+  const inner = el('div', { class: 'detail-inner fade-in' });
+  pane.appendChild(inner);
+
+  const head = el('div', { class: 'detail-head' },
+    el('h1', {}, s.name),
+    el('span', {
+      class: `badge ${s.eagerGrade || ''}`,
+      title: 'Eager — description tokens, always loaded',
+    }, `${fmt(s.eagerTokens)} eager`),
+    el('span', {
+      class: `badge ${s.grade || ''}`,
+      title: 'Lazy — body tokens, loaded only when this skill fires',
+    }, `${fmt(s.lazyTokens)} lazy`),
+    s.editable ? null : el('span', { class: 'badge readonly' }, 'read-only · plugin'),
+  );
+  inner.appendChild(head);
+
+  inner.appendChild(el('div', { class: 'detail-meta' }, s.dir));
+
+  if (s.description) {
+    inner.appendChild(el('div', { class: 'detail-desc' }, s.description));
+  }
+
+  // Tags row, if any
+  const myTopics = state.topics.filter((t) => t.members.some((m) => m.name === s.name));
+  if (myTopics.length) {
+    const tagsRow = el('div', { class: 'cloud', style: 'margin-bottom: 18px' });
+    for (const t of myTopics) {
+      tagsRow.appendChild(el('span', {
+        class: 'chip',
+        onclick: () => setFilter('topic', t.tag),
+      }, `/${t.tag}`, el('span', { class: 'num' }, String(t.members.length))));
+    }
+    inner.appendChild(tagsRow);
+  }
+
+  const toolbar = el('div', { class: 'toolbar' });
+  if (s.editable) {
+    if (state.editing) {
+      toolbar.appendChild(el('button', { class: 'btn primary', onclick: saveEdits }, 'Save'));
+      toolbar.appendChild(el('button', {
+        class: 'btn',
+        onclick: () => { state.editing = false; renderSkillDetail(); },
+      }, 'Cancel'));
+    } else {
+      toolbar.appendChild(el('button', {
+        class: 'btn',
+        onclick: () => { state.editing = true; renderSkillDetail(); },
+      }, 'Edit'));
+      toolbar.appendChild(el('button', { class: 'btn danger', onclick: deleteSelected }, 'Delete'));
+      toolbar.appendChild(el('button', {
+        class: 'btn',
+        onclick: () => { state.selected = null; renderDetail(); renderList(); },
+      }, '← Back to overview'));
+    }
+  } else {
+    toolbar.appendChild(el('button', {
+      class: 'btn',
+      onclick: () => { state.selected = null; renderDetail(); renderList(); },
+    }, '← Back to overview'));
+  }
+  inner.appendChild(toolbar);
+
+  if (state.editing) {
+    const ta = el('textarea', { class: 'body-edit', id: 'bodyEdit' });
+    ta.value = s.body || '';
+    inner.appendChild(ta);
+  } else {
+    inner.appendChild(el('div', { class: 'body-view' }, s.body || '(empty body)'));
+  }
+};
+
+/* ─── Detail pane: overview view ───────────────────── */
+
+const grade = (s) => s.grade || 'F';
+
+const renderOverview = () => {
+  const pane = $('#detail');
+  pane.innerHTML = '';
+
+  const inner = el('div', { class: 'detail-inner fade-in' });
+  pane.appendChild(inner);
+
+  // Hero
+  const eagerTotal = state.totals.eager || state.skills.reduce((a, s) => a + (s.eagerTokens || 0), 0);
+  const lazyTotal = state.totals.lazy || state.skills.reduce((a, s) => a + (s.lazyTokens || 0), 0);
+  const editableCount = state.skills.filter((s) => s.editable).length;
+  const hero = el('section', { class: 'hero' },
+    el('h1', {}, 'Your skill library at a glance'),
+    el('div', { class: 'hero-sub' },
+      `${state.skills.length} skills loading ${fmt(eagerTotal)} description tokens into the autorouter before you've typed a single prompt. ` +
+      `${fmt(lazyTotal)} more sit in skill bodies, ready to land if invoked. ` +
+      `Pick a topic, cluster, or skill from the left — or scan the highlights below.`),
+    el('div', { class: 'hero-stats' },
+      stat('Skills', state.skills.length, `${editableCount} editable`),
+      stat('Topics', state.topics.length, 'tag-based browsers'),
+      stat('Eager tok', fmt(eagerTotal), 'always loaded'),
+      stat('Lazy tok', fmt(lazyTotal), 'on invocation'),
+    ),
+  );
+  inner.appendChild(hero);
+
+  // Row 1: Eager + Lazy heaviest charts
+  const heaviestEager = [...state.skills].sort((a, b) => (b.eagerTokens || 0) - (a.eagerTokens || 0)).slice(0, 8);
+  const heaviestLazy = [...state.skills].sort((a, b) => (b.lazyTokens || 0) - (a.lazyTokens || 0)).slice(0, 8);
+  const maxEager = Math.max(1, ...heaviestEager.map((s) => s.eagerTokens || 0));
+  const maxLazy = Math.max(1, ...heaviestLazy.map((s) => s.lazyTokens || 0));
+  inner.appendChild(el('div', { class: 'grid two' },
+    card('Heaviest descriptions', 'eager — always loaded',
+      el('div', {},
+        ...heaviestEager.map((s) => barRow(s.name, s.eagerTokens || 0, maxEager, () => selectSkill(s.name))),
+      ),
+    ),
+    card('Heaviest bodies', 'lazy — load on invocation',
+      el('div', {},
+        ...heaviestLazy.map((s) => barRow(s.name, s.lazyTokens || 0, maxLazy, () => selectSkill(s.name))),
+      ),
+    ),
+  ));
+
+  // Row 1b: Grade donut
+  inner.appendChild(el('div', { class: 'grid' },
+    card('Quality breakdown', 'body-token grade distribution (lazy weight)', renderDonut()),
+  ));
+
+  // Row 2: Topics cloud + Cluster cards + MCP
+  const topTopics = [...state.topics].sort((a, b) => b.members.length - a.members.length).slice(0, 12);
+  const topClusters = [...state.clusters].sort((a, b) => (b.silhouette || 0) - (a.silhouette || 0)).slice(0, 5);
+  inner.appendChild(el('div', { class: 'grid three' },
+    card('Topics', `${state.topics.length} tag-based browsers`,
+      el('div', { class: 'cloud' },
+        ...topTopics.map((t) => el('span', {
+          class: 'chip',
+          onclick: () => setFilter('topic', t.tag),
+        }, `/${t.tag}`, el('span', { class: 'num' }, String(t.members.length)))),
+      ),
+    ),
+    card('Top clusters', 'click to inspect overlap',
+      el('div', {},
+        ...topClusters.map((c) => el('div', {
+          class: 'cluster-card',
+          onclick: () => showClusterDetail(c.id),
+        },
+          el('div', { class: 'label' }, c.label),
+          el('div', { class: 'meta' },
+            el('span', {}, `${c.members.length} skills`),
+            el('span', { class: `silhouette ${silhClass(c.silhouette || 0)}` }, (c.silhouette || 0).toFixed(2)),
+          ),
+        )),
+      ),
+    ),
+    card('MCP servers', `${state.mcpServers.length} configured`,
+      el('ul', { class: 'mini-list' },
+        ...state.mcpServers.slice(0, 8).map((m) => el('li', {},
+          el('span', { class: 'name' }, m.name),
+          el('span', { class: 'num' }, m.command || 'remote'),
+        )),
+      ),
+    ),
+  ));
+
+  // Row 3: Untagged callout (if any)
+  const tagged = new Set(state.topics.flatMap((t) => t.members.map((m) => m.name)));
+  const untagged = state.skills.filter((s) => !tagged.has(s.name));
+  if (untagged.length) {
+    inner.appendChild(el('div', { class: 'grid' },
+      card('Untagged skills', `${untagged.length} skills with no topic — candidates for review`,
+        el('div', { class: 'cloud' },
+          ...untagged.slice(0, 20).map((s) => el('span', {
+            class: 'chip',
+            onclick: () => selectSkill(s.name),
+          }, s.name, el('span', { class: 'num' }, fmt(s.lazyTokens)))),
+        ),
+      ),
+    ));
+  }
+};
+
+const stat = (label, value, delta) => el('div', { class: 'stat' },
+  el('div', { class: 'label' }, label),
+  el('div', { class: 'value' }, String(value)),
+  delta ? el('div', { class: 'delta' }, delta) : null,
+);
+
+const card = (title, hint, body) => el('div', { class: 'card' },
+  el('div', { class: 'card-head' },
+    el('h3', {}, title),
+    hint ? el('span', { class: 'hint' }, hint) : null,
+  ),
+  body,
+);
+
+const barRow = (label, value, max, onclick) => {
+  const pct = (value / max) * 100;
+  return el('div', { class: 'bar-row', onclick },
+    el('span', { class: 'label' }, label),
+    el('div', {},
+      el('div', { class: 'bar-track' }, el('div', { class: 'bar-fill', style: `width: ${pct}%` })),
+      el('div', { class: 'num' }, fmt(value)),
+    ),
+  );
+};
+
+/* ─── Donut chart (SVG) ────────────────────────────── */
+
+const GRADE_COLORS = { A: '#9ece6a', B: '#9ece6a', C: '#e0af68', D: '#f7768e', F: '#f7768e' };
+const GRADE_LABEL = { A: 'A — lean', B: 'B — good', C: 'C — heavy', D: 'D — bloated', F: 'F — failing' };
+
+const renderDonut = () => {
+  const counts = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+  for (const s of state.skills) counts[grade(s)] = (counts[grade(s)] || 0) + 1;
+  const total = state.skills.length || 1;
+
+  const size = 140;
+  const r = 56;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'donut');
+  svg.setAttribute('width', size); svg.setAttribute('height', size);
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+
+  const bg = document.createElementNS(svgNS, 'circle');
+  bg.setAttribute('cx', size / 2); bg.setAttribute('cy', size / 2); bg.setAttribute('r', r);
+  bg.setAttribute('fill', 'none'); bg.setAttribute('stroke', '#1c2130'); bg.setAttribute('stroke-width', 14);
+  svg.appendChild(bg);
+
+  for (const g of ['A', 'B', 'C', 'D', 'F']) {
+    const v = counts[g];
+    if (!v) continue;
+    const len = (v / total) * c;
+    const arc = document.createElementNS(svgNS, 'circle');
+    arc.setAttribute('cx', size / 2); arc.setAttribute('cy', size / 2); arc.setAttribute('r', r);
+    arc.setAttribute('fill', 'none');
+    arc.setAttribute('stroke', GRADE_COLORS[g]);
+    arc.setAttribute('stroke-width', 14);
+    arc.setAttribute('stroke-dasharray', `${len} ${c - len}`);
+    arc.setAttribute('stroke-dashoffset', -offset);
+    arc.setAttribute('transform', `rotate(-90 ${size / 2} ${size / 2})`);
+    svg.appendChild(arc);
+    offset += len;
+  }
+
+  // Center label
+  const txt = document.createElementNS(svgNS, 'text');
+  txt.setAttribute('x', size / 2); txt.setAttribute('y', size / 2 - 4);
+  txt.setAttribute('text-anchor', 'middle');
+  txt.setAttribute('fill', '#e8eaf1');
+  txt.setAttribute('font-size', '22'); txt.setAttribute('font-weight', '700');
+  txt.textContent = String(total);
+  const sub = document.createElementNS(svgNS, 'text');
+  sub.setAttribute('x', size / 2); sub.setAttribute('y', size / 2 + 14);
+  sub.setAttribute('text-anchor', 'middle');
+  sub.setAttribute('fill', '#8a90a3');
+  sub.setAttribute('font-size', '11'); sub.setAttribute('letter-spacing', '0.5');
+  sub.textContent = 'SKILLS';
+  svg.appendChild(txt); svg.appendChild(sub);
+
+  const legend = el('div', { class: 'donut-legend' },
+    ...['A', 'B', 'C', 'D', 'F'].map((g) => el('div', { class: 'donut-row' },
+      el('span', { class: 'swatch', style: `background: ${GRADE_COLORS[g]}` }),
+      el('span', { class: 'label' }, GRADE_LABEL[g]),
+      el('span', { class: 'num' }, `${counts[g]} (${Math.round(counts[g] / total * 100)}%)`),
+    )),
+  );
+
+  return el('div', { class: 'donut-wrap' }, svg, legend);
+};
+
+/* ─── Cluster overlap view ─────────────────────────── */
+
+const renderClusterDetail = () => {
+  const pane = $('#detail');
+  pane.innerHTML = '';
+  const inner = el('div', { class: 'detail-inner fade-in' });
+  pane.appendChild(inner);
+
+  const { cluster, members, overlap } = state.clusterDetail;
+  const sil = (cluster.silhouette || 0).toFixed(2);
+  const silClass = silhClass(cluster.silhouette || 0);
+
+  inner.appendChild(el('div', { class: 'detail-head' },
+    el('h1', {}, `Cluster: ${cluster.label}`),
+    el('span', { class: `silhouette ${silClass}` }, `silhouette ${sil}`),
+    el('span', { class: 'badge' }, `${members.length} members`),
+  ));
+  inner.appendChild(el('div', { class: 'detail-meta' },
+    `Mean similarity ${(cluster.meanSimilarity || 0).toFixed(2)} · ` +
+    `${cluster.confidence || 'low'} confidence — ${
+      silClass === 'high' ? 'these skills clearly overlap' :
+      silClass === 'medium' ? 'these skills probably overlap; verify before deleting' :
+      'low confidence — could be a noisy grouping'
+    }`,
+  ));
+
+  inner.appendChild(el('div', { class: 'toolbar' },
+    el('button', {
+      class: 'btn',
+      onclick: () => { state.clusterDetail = null; setFilter('cluster', cluster.id); },
+    }, 'Show as filtered list'),
+    el('button', {
+      class: 'btn',
+      onclick: () => { state.clusterDetail = null; renderDetail(); },
+    }, '← Back to overview'),
+  ));
+
+  // Pairwise similarity
+  const pairsCard = card('Pairwise similarity', 'cosine TF-IDF inside this cluster',
+    el('div', {},
+      ...overlap.pairs.map((p) => {
+        const pct = Math.round(p.similarity * 100);
+        const flag = pct >= 70 ? 'F' : pct >= 50 ? 'D' : pct >= 30 ? 'C' : 'A';
+        return el('div', { class: 'bar-row' },
+          el('span', { class: 'label' },
+            el('span', {
+              style: 'cursor:pointer;text-decoration:underline dotted',
+              onclick: () => selectSkill(p.a),
+            }, p.a),
+            ' ↔ ',
+            el('span', {
+              style: 'cursor:pointer;text-decoration:underline dotted',
+              onclick: () => selectSkill(p.b),
+            }, p.b),
+          ),
+          el('div', {},
+            el('div', { class: 'bar-track' }, el('div', { class: 'bar-fill', style: `width: ${pct}%` })),
+            el('div', { class: 'num' }, el('span', { class: `badge ${flag}` }, `${pct}%`)),
+          ),
+        );
+      }),
+    ),
+  );
+  inner.appendChild(pairsCard);
+
+  // Shared core
+  inner.appendChild(card(
+    `Shared by ≥${Math.max(2, Math.ceil(members.length * 0.66))} of ${members.length}`,
+    `${overlap.shared.length} core terms`,
+    el('div', { class: 'cloud' },
+      ...overlap.shared.slice(0, 30).map((s) =>
+        el('span', { class: 'chip' }, s.token, el('span', { class: 'num' }, `${s.members}/${members.length}`)),
+      ),
+      overlap.shared.length === 0
+        ? el('span', { style: 'color: var(--text-muted)' }, 'No tokens common to most members — these skills may not actually overlap.')
+        : null,
+    ),
+  ));
+
+  // Per-member unique terms
+  inner.appendChild(card('What each skill uniquely knows', 'top tokens that appear only in this skill, not in the others',
+    el('div', {},
+      ...members.map((m) => {
+        const uniq = overlap.unique[m.name] || [];
+        return el('div', { style: 'margin-bottom: 14px;' },
+          el('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;' },
+            el('div', {},
+              el('strong', {
+                style: 'cursor:pointer;text-decoration:underline dotted',
+                onclick: () => selectSkill(m.name),
+              }, m.name),
+              ' ',
+              el('span', { class: 'badge', style: 'margin-left:8px' }, `${fmt(m.eagerTokens)}e · ${fmt(m.lazyTokens)}L`),
+            ),
+            uniq.length === 0
+              ? el('span', { style: 'color: var(--danger);font-size:12px' }, '⚠ no unique vocabulary — likely duplicate')
+              : el('span', { style: 'color: var(--text-muted);font-size:12px' }, `${uniq.length} unique terms`),
+          ),
+          uniq.length === 0 ? null : el('div', { class: 'cloud' },
+            ...uniq.map((u) => el('span', { class: 'chip' }, u.token, el('span', { class: 'num' }, String(u.freq)))),
+          ),
+        );
+      }),
+    ),
+  ));
+};
+
+/* ─── Routing ──────────────────────────────────────── */
+
+const renderDetail = () => {
+  if (state.selected) renderSkillDetail();
+  else if (state.clusterDetail) renderClusterDetail();
+  else renderOverview();
+};
+
+const showClusterDetail = async (clusterId) => {
+  try {
+    const detail = await api(`/api/clusters/${encodeURIComponent(clusterId)}`);
+    state.clusterDetail = detail;
+    state.selected = null;
+    renderSidebar();
+    renderDetail();
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+const setFilter = (kind, value) => {
+  state.filter = { kind, value };
+  state.selected = null;
+  state.clusterDetail = null;
+  state.editing = false;
+  renderSidebar();
+  renderList();
+  renderDetail();
+};
+
+const selectSkill = async (name) => {
+  try {
+    const skill = await api(`/api/skills/${encodeURIComponent(name)}`);
+    state.selected = skill;
+    state.clusterDetail = null;
+    state.editing = false;
+    renderList();
+    renderSidebar();
+    renderDetail();
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+const saveEdits = async () => {
+  if (!state.selected) return;
+  const body = $('#bodyEdit').value;
+  try {
+    await api(`/api/skills/${encodeURIComponent(state.selected.name)}`, {
+      method: 'PUT', body: JSON.stringify({ body }),
+    });
+    state.selected.body = body;
+    state.editing = false;
+    renderSkillDetail();
+    toast('Saved (backup created in ~/.claude/curator/backups)');
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+const deleteSelected = async () => {
+  if (!state.selected) return;
+  const name = state.selected.name;
+  if (!confirm(`Delete skill "${name}"?\n\nA backup will be saved to ~/.claude/curator/backups/ first.`)) return;
+  try {
+    await api(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    state.skills = state.skills.filter((s) => s.name !== name);
+    state.selected = null;
+    state.editing = false;
+    renderList();
+    renderDetail();
+    toast(`Deleted ${name}`);
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+/* ─── Boot ─────────────────────────────────────────── */
+
+const init = async () => {
+  try {
+    const data = await api('/api/state');
+    state.skills = data.skills;
+    state.topics = data.topics;
+    state.clusters = data.clusters;
+    state.mcpServers = data.mcpServers || [];
+    state.totals = data.totals || { eager: 0, lazy: 0, all: 0 };
+    renderSidebar();
+    renderList();
+    renderDetail();
+  } catch (e) {
+    document.body.innerHTML = `<div style="padding:60px;color:#f7768e;font-family:ui-monospace,monospace;background:#0b0d12;height:100vh">
+      <h2 style="margin-top:0">Couldn't load scan data</h2>
+      <p>${e.message}</p>
+      <p style="color:#8a90a3">Run <code style="background:#1c2130;padding:2px 8px;border-radius:4px">curator scan</code> first, then refresh this page.</p>
+    </div>`;
+  }
+};
+
+$('#search').addEventListener('input', (e) => {
+  state.query = e.target.value;
+  renderList();
+});
+
+init();

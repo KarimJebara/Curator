@@ -1,0 +1,41 @@
+{
+  "name": "@curator/cli",
+  "version": "0.1.0",
+  "description": "A curator for your Claude Code skills and MCP servers — turns overlapping skills into specialists plus a router.",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "curator": "bin/curator.js"
+  },
+  "scripts": {
+    "test": "node tests/run-all.js",
+    "scan": "node bin/curator.js scan",
+    "review": "node bin/curator.js review",
+    "lint": "node --check bin/curator.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "mcp",
+    "skills",
+    "audit",
+    "curator"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0"
+  },
+  "files": [
+    "bin",
+    "src",
+    ".claude",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "playwright": "^1.59.1"
+  }
+}
