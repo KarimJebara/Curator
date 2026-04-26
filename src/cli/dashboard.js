@@ -312,6 +312,21 @@ export const dashboard = ({ port = 4711, open = true } = {}) => {
     });
   });
 
+  // Friendlier error than a raw stack trace when the user already has a
+  // dashboard running (or another process is on the port).
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      const url = `http://127.0.0.1:${port}`;
+      console.error(`Port ${port} is already in use.`);
+      console.error(`If a curator dashboard is already running, open ${url} in your browser.`);
+      console.error(`Otherwise stop the other process, or pass --port <other> to use a different port.`);
+      console.error(`(macOS quick stop: kill $(lsof -ti:${port}))`);
+      process.exit(1);
+    }
+    console.error(err);
+    process.exit(1);
+  });
+
   server.listen(port, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${port}`;
     console.log(`curator dashboard running at ${url}`);
