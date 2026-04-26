@@ -49,15 +49,40 @@ const silhClass = (s) => (s >= 0.28 ? 'high' : s >= 0.18 ? 'medium' : 'low');
 
 /* ─── Sidebar ──────────────────────────────────────── */
 
+// Frontmatter origin values vary in case (ECC vs ecc, etc.) so we normalize
+// when matching. Labels are what the sidebar shows.
+const ORIGIN_LABELS = {
+  ecc: 'Everything Claude Code',
+  community: 'Community',
+  custom: 'Custom (you wrote it)',
+  unset: 'No origin tag',
+};
+const labelForOrigin = (origin) => ORIGIN_LABELS[(origin || 'unset').toLowerCase()] || origin;
+
 const renderSidebar = () => {
   // Counts
-  const editable = state.skills.filter((s) => s.editable).length;
   const tagged = new Set(state.topics.flatMap((t) => t.members.map((m) => m.name)));
   const untagged = state.skills.filter((s) => !tagged.has(s.name)).length;
   $('#cAll').textContent = state.skills.length;
-  $('#cUser').textContent = editable;
-  $('#cPlugin').textContent = state.skills.length - editable;
   $('#cOrphan').textContent = untagged;
+
+  // Origins
+  const byOrigin = new Map();
+  for (const s of state.skills) {
+    const o = s.origin || 'unset';
+    byOrigin.set(o, (byOrigin.get(o) || 0) + 1);
+  }
+  const originsEl = $('#origins');
+  originsEl.innerHTML = '';
+  const sortedOrigins = [...byOrigin.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [origin, count] of sortedOrigins) {
+    const label = labelForOrigin(origin);
+    const btn = el('button', {
+      class: 'filter-btn' + (state.filter.kind === 'origin' && state.filter.value === origin ? ' active' : ''),
+      onclick: () => setFilter('origin', origin),
+    }, label, el('span', { class: 'count' }, String(count)));
+    originsEl.appendChild(el('li', {}, btn));
+  }
 
   const topicsEl = $('#topics');
   topicsEl.innerHTML = '';
@@ -103,10 +128,8 @@ const filterSkills = () => {
       const names = new Set(c.members.map((m) => m.name));
       list = list.filter((s) => names.has(s.name));
     }
-  } else if (state.filter.kind === 'user') {
-    list = list.filter((s) => s.editable);
-  } else if (state.filter.kind === 'plugin') {
-    list = list.filter((s) => !s.editable);
+  } else if (state.filter.kind === 'origin') {
+    list = list.filter((s) => (s.origin || 'unset') === state.filter.value);
   } else if (state.filter.kind === 'orphans') {
     const tagged = new Set(state.topics.flatMap((t) => t.members.map((m) => m.name)));
     list = list.filter((s) => !tagged.has(s.name));
@@ -132,8 +155,7 @@ const headerLabel = () => {
     const c = state.clusters.find((x) => x.id === f.value);
     return `Cluster: ${c ? c.label : f.value}`;
   }
-  if (f.kind === 'user') return 'User-owned skills';
-  if (f.kind === 'plugin') return 'Plugin skills';
+  if (f.kind === 'origin') return `Origin: ${labelForOrigin(f.value)}`;
   if (f.kind === 'orphans') return 'Untagged skills';
   return 'All skills';
 };
@@ -848,7 +870,9 @@ const renderMcpDetail = () => {
     el('div', { style: 'font-size: 13px; line-height: 1.7' },
       el('div', {}, `Loaded into Claude on every session: ${fmt(m.tokens)} tokens`),
       el('div', { style: 'color: var(--text-muted)' },
-        'Note: this is a conservative envelope estimate. The real cost equals the server\'s tool definitions, which we don\'t probe live yet.',
+        m.tokensSource === 'known'
+          ? 'Source: curated estimate for this server. Order-of-magnitude accurate, not measured live.'
+          : 'Source: envelope estimate (server name not in our known-server table). Likely under-counts servers with rich tool schemas — we\'d need to probe the server live for an accurate number.',
       ),
     ),
   ));

@@ -113,6 +113,7 @@ const handle = async (req, res) => {
       hasFrontmatterTags: !!(frontmatter && frontmatter.tags),
       tags: tagsByName.get(rest.name) || [],
       editable: isEditable(rest.dir),
+      origin: (frontmatter && frontmatter.origin) || 'unset',
     }));
     const totals = skills.reduce(
       (a, s) => ({

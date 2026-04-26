@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { claudeJsonPath } from '../lib/paths.js';
 import { estimateTokens, grade } from '../lib/tokens.js';
+import { lookupMcpTokens } from '../lib/mcp-known-servers.js';
 
 const safeJson = (p) => {
   if (!fs.existsSync(p)) return null;
@@ -44,17 +45,26 @@ export const collectMcpServers = ({ projectMcpPath } = {}) => {
   return out;
 };
 
-// Estimate token cost of an MCP server. Without live tool-listing, we
-// approximate from the config envelope. Real cost requires probing the server
-// for its tool schemas; that's a Phase 2 enhancement.
+// Estimate token cost of an MCP server. Two-step:
+//   1. Look up the server in a curated table of popular MCPs (tools-list
+//      schemas are predictable for known servers — table values are
+//      order-of-magnitude estimates, not measured live).
+//   2. If unknown, fall back to a config-envelope estimate. This badly
+//      under-counts servers with rich tool schemas, but it's better than
+//      nothing for ones we haven't catalogued yet.
+//
+// Each result carries a `source` flag so the UI can show "approx." when
+// the number is from the table vs "guess" when it's the envelope estimate.
 export const estimateMcpTokens = (server) => {
+  const known = lookupMcpTokens(server);
+  if (known) return { tokens: known, source: 'known' };
   const envelope = JSON.stringify({
     command: server.command,
     args: server.args,
     env: Object.keys(server.env || {}),
   });
-  // Conservative floor: 200 tokens for any connected server (handshake overhead).
-  return Math.max(200, estimateTokens(envelope) * 4);
+  // Floor at 200 tokens for any connected server (handshake overhead).
+  return { tokens: Math.max(200, estimateTokens(envelope) * 4), source: 'envelope' };
 };
 
 export const mcpDuplicates = (servers) => {
@@ -75,7 +85,7 @@ export const mcpDuplicates = (servers) => {
 
 export const mcpDigest = (servers) => {
   return servers.map((s) => {
-    const tokens = estimateMcpTokens(s);
-    return { ...s, tokens, grade: grade(tokens) };
+    const { tokens, source } = estimateMcpTokens(s);
+    return { ...s, tokens, tokensSource: source, grade: grade(tokens) };
   });
 };
