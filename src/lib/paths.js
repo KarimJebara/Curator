@@ -5,7 +5,8 @@ import fs from 'node:fs';
 const HOME = os.homedir();
 
 export const claudeHome = () => path.join(HOME, '.claude');
-export const userSkillsDir = () => path.join(claudeHome(), 'skills');
+// Honors CURATOR_USER_SKILLS_DIR for test isolation. Default is ~/.claude/skills.
+export const userSkillsDir = () => process.env.CURATOR_USER_SKILLS_DIR || path.join(claudeHome(), 'skills');
 export const userCommandsDir = () => path.join(claudeHome(), 'commands');
 export const userPluginsDir = () => path.join(claudeHome(), 'plugins');
 export const claudeJsonPath = () => path.join(HOME, '.claude.json');

@@ -405,3 +405,124 @@ textarea.body-edit:focus { outline: none; border-color: var(--accent); }
 /* ─── Small utility ────────────────────────────────── */
 .fade-in { animation: fadeIn 0.25s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── Modal ────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; animation: fadeIn 0.18s ease-out;
+}
+.modal-backdrop.hidden { display: none; }
+.modal {
+  width: min(640px, 92vw); max-height: 86vh;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.modal-head h2 { margin: 0; font-size: 18px; }
+.modal-close {
+  background: transparent; border: 0; color: var(--text-muted);
+  font-size: 22px; cursor: pointer; line-height: 1;
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+}
+.modal-close:hover { background: var(--panel-2); color: var(--text); }
+.modal-body {
+  padding: 18px 22px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.modal-body label { display: flex; flex-direction: column; gap: 6px; }
+.modal-body label span { font-weight: 600; font-size: 13px; }
+.modal-body label em { color: var(--text-faint); font-style: normal; font-weight: 400; }
+.modal-body input[type="text"], .modal-body textarea {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 12px; font: inherit; font-family: var(--mono);
+}
+.modal-body textarea { resize: vertical; min-height: 110px; }
+.modal-body input:focus, .modal-body textarea:focus { outline: none; border-color: var(--accent); }
+.modal-body small { color: var(--text-faint); font-size: 11.5px; }
+.modal-body small code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+/* ─── Tag editor chips (with remove ×) ─────────────── */
+.tag-editor { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
+.tag-editor .chip { padding-right: 6px; }
+.tag-editor .chip .x {
+  margin-left: 4px; cursor: pointer; color: var(--text-faint);
+  width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; line-height: 1;
+}
+.tag-editor .chip .x:hover { background: var(--danger-soft); color: var(--danger); }
+.tag-editor .add-tag {
+  background: var(--panel-2); color: var(--text);
+  border: 1px dashed var(--border); border-radius: 999px;
+  padding: 4px 10px; font: inherit; font-size: 13px;
+  width: 140px;
+}
+.tag-editor .add-tag:focus { outline: none; border-color: var(--accent); border-style: solid; }
+.tag-editor .save-tags {
+  background: var(--accent); color: #0b0d12; border: 0;
+  border-radius: 999px; padding: 4px 12px;
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.tag-editor .save-tags:hover { filter: brightness(1.1); }
+
+/* ─── MCP rows (bars + click) ──────────────────────── */
+.mcp-row {
+  display: grid; grid-template-columns: 1fr 100px 60px;
+  align-items: center; gap: 12px;
+  padding: 8px 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.mcp-row:hover { background: var(--panel-2); margin: 0 -8px; padding: 8px 8px; }
+.mcp-row .name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-row .scope { color: var(--text-faint); font-size: 11px; font-family: var(--mono); }
+.mcp-row .bar-track {
+  position: relative; height: 6px;
+  background: var(--panel-2); border-radius: 3px; overflow: hidden;
+}
+.mcp-row .bar-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(135deg, #e0af68 0%, #f7768e 100%);
+  border-radius: 3px;
+}
+.mcp-row .num { font-family: var(--mono); font-size: 12px; color: var(--text-muted); text-align: right; }
+
+/* ─── Cost-comparison callout ──────────────────────── */
+.callout {
+  background: linear-gradient(135deg, rgba(247,118,142,0.10) 0%, rgba(224,175,104,0.08) 100%);
+  border: 1px solid rgba(247,118,142,0.25);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  display: flex; gap: 18px; align-items: center;
+}
+.callout .icon {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--danger-soft); color: var(--danger);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.callout .body { flex: 1; }
+.callout .title { font-weight: 600; margin-bottom: 2px; }
+.callout .detail { color: var(--text-muted); font-size: 13px; }

@@ -44,7 +44,12 @@ const fakeState = {
 };
 fs.writeFileSync(path.join(reportsPath, 'latest.json'), JSON.stringify(fakeState));
 
+// Override both the curator-config dir and the user-skills dir so the test is
+// fully self-contained and never touches the user's real ~/.claude/.
+const fakeUserSkillsDir = path.join(tmpHome, 'user-skills');
+fs.mkdirSync(fakeUserSkillsDir, { recursive: true });
 process.env.CURATOR_HOME = tmpHome;
+process.env.CURATOR_USER_SKILLS_DIR = fakeUserSkillsDir;
 
 // Import AFTER setting env so paths.js picks it up
 const { dashboard } = await import('../../src/cli/dashboard.js');
@@ -135,9 +140,51 @@ export const tests = {
     assert.equal(r.status, 404);
   },
 
+  'POST /api/skills creates a new SKILL.md in user skills dir': async () => {
+    const r = await fetch(`${base}/api/skills`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'created-by-test',
+        description: 'a skill created by the dashboard test suite to verify the route',
+        tags: ['test', 'demo'],
+        body: '# Created by test\n\nbody.',
+      }),
+    });
+    assert.equal(r.status, 201);
+    const created = path.join(fakeUserSkillsDir, 'created-by-test', 'SKILL.md');
+    assert.ok(fs.existsSync(created), 'SKILL.md should exist on disk');
+    const content = fs.readFileSync(created, 'utf8');
+    assert.ok(content.includes('name: created-by-test'));
+    assert.ok(content.includes('tags: test, demo'));
+    assert.ok(content.includes('Created by test'));
+  },
+
+  'POST /api/skills rejects invalid name': async () => {
+    const r = await fetch(`${base}/api/skills`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'has spaces and CAPS', description: 'nope' }),
+    });
+    assert.equal(r.status, 400);
+  },
+
+  'POST /api/skills rejects duplicate name': async () => {
+    const r = await fetch(`${base}/api/skills`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'created-by-test',
+        description: 'attempting to create a duplicate',
+      }),
+    });
+    assert.equal(r.status, 409);
+  },
+
   'cleanup: server closes': async () => {
     await close();
     fs.rmSync(tmpHome, { recursive: true, force: true });
     delete process.env.CURATOR_HOME;
+    delete process.env.CURATOR_USER_SKILLS_DIR;
   },
 };

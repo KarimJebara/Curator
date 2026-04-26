@@ -3,12 +3,13 @@ const state = {
   topics: [],
   clusters: [],
   mcpServers: [],
-  totals: { eager: 0, lazy: 0, all: 0 },
+  totals: { eager: 0, lazy: 0, all: 0, mcp: 0 },
   filter: { kind: 'all', value: null },
   query: '',
   selected: null,
   editing: false,
   clusterDetail: null, // { cluster, members, overlap } or null
+  mcpDetail: null,     // mcp server object or null
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -200,17 +201,21 @@ const renderSkillDetail = () => {
     inner.appendChild(el('div', { class: 'detail-desc' }, s.description));
   }
 
-  // Tags row, if any
-  const myTopics = state.topics.filter((t) => t.members.some((m) => m.name === s.name));
-  if (myTopics.length) {
-    const tagsRow = el('div', { class: 'cloud', style: 'margin-bottom: 18px' });
-    for (const t of myTopics) {
-      tagsRow.appendChild(el('span', {
-        class: 'chip',
-        onclick: () => setFilter('topic', t.tag),
-      }, `/${t.tag}`, el('span', { class: 'num' }, String(t.members.length))));
+  // Tag editor — user-owned skills can edit; plugin skills just display.
+  if (s.editable) {
+    inner.appendChild(renderTagEditor(s));
+  } else {
+    const myTopics = state.topics.filter((t) => t.members.some((m) => m.name === s.name));
+    if (myTopics.length) {
+      const tagsRow = el('div', { class: 'cloud', style: 'margin-bottom: 18px' });
+      for (const t of myTopics) {
+        tagsRow.appendChild(el('span', {
+          class: 'chip',
+          onclick: () => setFilter('topic', t.tag),
+        }, t.tag, el('span', { class: 'num' }, String(t.members.length))));
+      }
+      inner.appendChild(tagsRow);
     }
-    inner.appendChild(tagsRow);
   }
 
   const toolbar = el('div', { class: 'toolbar' });
@@ -279,6 +284,25 @@ const renderOverview = () => {
   );
   inner.appendChild(hero);
 
+  // Cost-comparison callout: eager skill descriptions vs MCP tool envelopes.
+  // MCP cost is usually 5–20× the skill-description cost — surfacing the
+  // ratio is the most actionable single number on the page.
+  if (state.totals.mcp && state.totals.eager) {
+    const ratio = state.totals.mcp / state.totals.eager;
+    if (ratio >= 2) {
+      inner.appendChild(el('div', { class: 'callout' },
+        el('div', { class: 'icon' }, '!'),
+        el('div', { class: 'body' },
+          el('div', { class: 'title' }, `Your MCP servers cost ${ratio.toFixed(1)}× more than your skill descriptions`),
+          el('div', { class: 'detail' },
+            `${fmt(state.totals.mcp)} tokens of MCP tool envelopes vs ${fmt(state.totals.eager)} tokens of skill descriptions, both loaded every session. ` +
+            `Trimming MCP servers you don't actually use is the highest-leverage cleanup.`,
+          ),
+        ),
+      ));
+    }
+  }
+
   // Row 1: Eager + Lazy heaviest charts
   const heaviestEager = [...state.skills].sort((a, b) => (b.eagerTokens || 0) - (a.eagerTokens || 0)).slice(0, 8);
   const heaviestLazy = [...state.skills].sort((a, b) => (b.lazyTokens || 0) - (a.lazyTokens || 0)).slice(0, 8);
@@ -328,12 +352,23 @@ const renderOverview = () => {
         )),
       ),
     ),
-    card('MCP servers', `${state.mcpServers.length} configured`,
-      el('ul', { class: 'mini-list' },
-        ...state.mcpServers.slice(0, 8).map((m) => el('li', {},
-          el('span', { class: 'name' }, m.name),
-          el('span', { class: 'num' }, m.command || 'remote'),
-        )),
+    card('MCP servers', `${state.mcpServers.length} · ${fmt(state.totals.mcp || 0)} tok`,
+      el('div', {},
+        ...(() => {
+          const sorted = [...state.mcpServers].sort((a, b) => (b.tokens || 0) - (a.tokens || 0)).slice(0, 8);
+          const maxTok = Math.max(1, ...sorted.map((m) => m.tokens || 0));
+          return sorted.map((m) => el('div', {
+            class: 'mcp-row',
+            onclick: () => showMcpDetail(m.name),
+          },
+            el('div', {},
+              el('div', { class: 'name' }, m.name),
+              el('div', { class: 'scope' }, m.command || (m.url ? 'remote' : '—')),
+            ),
+            el('div', { class: 'bar-track' }, el('div', { class: 'bar-fill', style: `width: ${(m.tokens || 0) / maxTok * 100}%` })),
+            el('div', { class: 'num' }, fmt(m.tokens)),
+          ));
+        })(),
       ),
     ),
   ));
@@ -555,11 +590,181 @@ const renderClusterDetail = () => {
   ));
 };
 
+/* ─── Tag editor ───────────────────────────────────── */
+
+const parseTagsField = (raw) => {
+  if (!raw) return [];
+  return String(raw).split(/[,\s]+/).map((t) => t.trim()).filter(Boolean);
+};
+
+const renderTagEditor = (skill) => {
+  const tags = parseTagsField(skill.frontmatter?.tags);
+  const wrap = el('div', { class: 'tag-editor' });
+
+  let dirty = false;
+  let working = [...tags];
+
+  const rerender = () => {
+    wrap.innerHTML = '';
+    for (const tag of working) {
+      const chip = el('span', { class: 'chip' }, tag,
+        el('span', {
+          class: 'x',
+          title: `Remove ${tag}`,
+          onclick: (ev) => { ev.stopPropagation(); working = working.filter((t) => t !== tag); dirty = true; rerender(); },
+        }, '×'),
+      );
+      wrap.appendChild(chip);
+    }
+    const input = el('input', { type: 'text', class: 'add-tag', placeholder: '+ tag' });
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      const v = input.value.trim().toLowerCase();
+      if (v && !working.includes(v)) {
+        working.push(v);
+        dirty = true;
+        rerender();
+      }
+    });
+    wrap.appendChild(input);
+    if (dirty) {
+      wrap.appendChild(el('button', {
+        class: 'save-tags',
+        onclick: () => saveTags(skill, working),
+      }, 'Save tags'));
+    }
+  };
+  rerender();
+  return wrap;
+};
+
+const saveTags = async (skill, tags) => {
+  try {
+    await api(`/api/skills/${encodeURIComponent(skill.name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ frontmatter: { tags: tags.join(', ') } }),
+    });
+    toast(`Tags saved (${tags.length}). Recomputing topics…`);
+    // Refresh state + re-fetch the skill so the editor reflects what's on disk
+    const data = await api('/api/state');
+    Object.assign(state, {
+      skills: data.skills,
+      topics: data.topics,
+      clusters: data.clusters,
+      mcpServers: data.mcpServers || [],
+      totals: data.totals || state.totals,
+    });
+    const fresh = await api(`/api/skills/${encodeURIComponent(skill.name)}`);
+    state.selected = fresh;
+    renderSidebar();
+    renderList();
+    renderDetail();
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+/* ─── New skill modal ──────────────────────────────── */
+
+const openNewSkillModal = () => {
+  $('#newName').value = '';
+  $('#newDesc').value = '';
+  $('#newTags').value = '';
+  $('#newBody').value = '';
+  $('#modal').classList.remove('hidden');
+  setTimeout(() => $('#newName').focus(), 50);
+};
+const closeModal = () => $('#modal').classList.add('hidden');
+
+const submitNewSkill = async () => {
+  const name = $('#newName').value.trim().toLowerCase();
+  const description = $('#newDesc').value.trim();
+  const tags = parseTagsField($('#newTags').value);
+  const body = $('#newBody').value;
+  try {
+    const r = await api('/api/skills', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, tags, body }),
+    });
+    closeModal();
+    toast(`Created ${r.name}`);
+    const data = await api('/api/state');
+    Object.assign(state, {
+      skills: data.skills,
+      topics: data.topics,
+      clusters: data.clusters,
+      mcpServers: data.mcpServers || [],
+      totals: data.totals || state.totals,
+    });
+    renderSidebar();
+    renderList();
+    selectSkill(r.name);
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+/* ─── MCP detail view ──────────────────────────────── */
+
+const renderMcpDetail = () => {
+  const pane = $('#detail');
+  pane.innerHTML = '';
+  const inner = el('div', { class: 'detail-inner fade-in' });
+  pane.appendChild(inner);
+
+  const m = state.mcpDetail;
+  inner.appendChild(el('div', { class: 'detail-head' },
+    el('h1', {}, m.name),
+    el('span', { class: `badge ${m.grade || ''}` }, `${fmt(m.tokens)} tokens`),
+    el('span', { class: 'badge' }, m.scope || 'global'),
+  ));
+  inner.appendChild(el('div', { class: 'detail-meta' }, m.source || ''));
+
+  inner.appendChild(el('div', { class: 'toolbar' },
+    el('button', {
+      class: 'btn',
+      onclick: () => { state.mcpDetail = null; renderDetail(); },
+    }, '← Back to overview'),
+  ));
+
+  const rows = [];
+  if (m.command) rows.push(['Command', m.command]);
+  if (Array.isArray(m.args) && m.args.length) rows.push(['Args', m.args.join(' ')]);
+  if (m.url) rows.push(['URL', m.url]);
+  if (m.transport) rows.push(['Transport', m.transport]);
+  const envKeys = Object.keys(m.env || {});
+  if (envKeys.length) rows.push(['Env keys', envKeys.join(', ')]);
+
+  inner.appendChild(card('Configuration', 'how this server is invoked',
+    el('div', {},
+      ...rows.map(([k, v]) => el('div', { class: 'bar-row' },
+        el('span', { class: 'label' }, k),
+        el('span', { style: 'font-family: var(--mono); font-size: 12px; color: var(--text-muted); word-break: break-all;' }, v),
+      )),
+    ),
+  ));
+
+  inner.appendChild(card('Token cost', 'estimate of always-loaded weight',
+    el('div', { style: 'font-size: 13px; line-height: 1.7' },
+      el('div', {}, `Eager (loaded every session): ${fmt(m.tokens)} tokens`),
+      el('div', { style: 'color: var(--text-muted)' },
+        'Note: this is a conservative envelope estimate. The real cost equals the server\'s tool definitions, which we don\'t probe live yet.',
+      ),
+    ),
+  ));
+};
+
+const showMcpDetail = (mcpName) => {
+  const m = state.mcpServers.find((x) => x.name === mcpName);
+  if (!m) return;
+  state.mcpDetail = m;
+  state.selected = null;
+  state.clusterDetail = null;
+  renderDetail();
+};
+
 /* ─── Routing ──────────────────────────────────────── */
 
 const renderDetail = () => {
   if (state.selected) renderSkillDetail();
   else if (state.clusterDetail) renderClusterDetail();
+  else if (state.mcpDetail) renderMcpDetail();
   else renderOverview();
 };
 
@@ -568,6 +773,7 @@ const showClusterDetail = async (clusterId) => {
     const detail = await api(`/api/clusters/${encodeURIComponent(clusterId)}`);
     state.clusterDetail = detail;
     state.selected = null;
+    state.mcpDetail = null;
     renderSidebar();
     renderDetail();
   } catch (e) { toast(e.message, 'error'); }
@@ -577,6 +783,7 @@ const setFilter = (kind, value) => {
   state.filter = { kind, value };
   state.selected = null;
   state.clusterDetail = null;
+  state.mcpDetail = null;
   state.editing = false;
   renderSidebar();
   renderList();
@@ -588,6 +795,7 @@ const selectSkill = async (name) => {
     const skill = await api(`/api/skills/${encodeURIComponent(name)}`);
     state.selected = skill;
     state.clusterDetail = null;
+    state.mcpDetail = null;
     state.editing = false;
     renderList();
     renderSidebar();
@@ -650,5 +858,12 @@ $('#search').addEventListener('input', (e) => {
   state.query = e.target.value;
   renderList();
 });
+
+$('#newSkillBtn').addEventListener('click', openNewSkillModal);
+$('#modalCloseBtn').addEventListener('click', closeModal);
+$('#modalCancelBtn').addEventListener('click', closeModal);
+$('#modalCreateBtn').addEventListener('click', submitNewSkill);
+$('#modal').addEventListener('click', (ev) => { if (ev.target.id === 'modal') closeModal(); });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeModal(); });
 
 init();

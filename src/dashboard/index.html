@@ -13,6 +13,7 @@
       curator
     </div>
     <input id="search" type="search" placeholder="Search skills by name or description…" autocomplete="off" />
+    <button id="newSkillBtn" class="btn primary" type="button">+ New skill</button>
     <div class="counts" id="counts"></div>
   </header>
 
@@ -51,6 +52,41 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+
+  <div id="modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="modalTitle">New skill</h2>
+        <button class="modal-close" id="modalCloseBtn" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <label>
+          <span>Name</span>
+          <input id="newName" type="text" placeholder="my-cool-skill" autocomplete="off" />
+          <small>Lowercase, alphanumeric + hyphens. Becomes the directory name in <code>~/.claude/skills/</code>.</small>
+        </label>
+        <label>
+          <span>Description</span>
+          <input id="newDesc" type="text" placeholder="One sentence describing when to invoke this skill." autocomplete="off" />
+          <small>This is the eager-loaded text the autorouter sees on every session. Keep it tight — under 100 tokens is ideal.</small>
+        </label>
+        <label>
+          <span>Tags <em>(optional)</em></span>
+          <input id="newTags" type="text" placeholder="kotlin, testing" autocomplete="off" />
+          <small>Comma-separated. Topics emerge automatically when 3+ skills share a tag.</small>
+        </label>
+        <label>
+          <span>Body <em>(optional)</em></span>
+          <textarea id="newBody" rows="8" placeholder="# my-cool-skill&#10;&#10;What this skill does, when to invoke it, and how to use it."></textarea>
+          <small>Lazy-loaded — only paid when this skill actually fires.</small>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="modalCancelBtn" type="button">Cancel</button>
+        <button class="btn primary" id="modalCreateBtn" type="button">Create skill</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/app.js" type="module"></script>
 </body>

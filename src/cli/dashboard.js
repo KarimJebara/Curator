@@ -6,6 +6,17 @@ import { reportsDir, userSkillsDir } from '../lib/paths.js';
 import { readSkill, writeSkill } from '../lib/skill-parser.js';
 import { backup } from '../lib/backup.js';
 import { analyzeOverlap } from '../detectors/cluster-overlap.js';
+import { scan } from './scan.js';
+
+// Run a quick deterministic re-scan after any mutation so /api/state reflects
+// the new skill/tag/etc on the next read. The scan is fast (~3s on a 100-skill
+// library) and writes to the same latest.json the dashboard reads from.
+let refreshing = null;
+const refreshSnapshot = async () => {
+  if (refreshing) return refreshing;
+  refreshing = scan({ quiet: true }).finally(() => { refreshing = null; });
+  return refreshing;
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -97,9 +108,11 @@ const handle = async (req, res) => {
         eager: a.eager + (s.eagerTokens || 0),
         lazy: a.lazy + (s.lazyTokens || 0),
         all: a.all + (s.tokens || 0),
+        mcp: a.mcp,
       }),
-      { eager: 0, lazy: 0, all: 0 },
+      { eager: 0, lazy: 0, all: 0, mcp: 0 },
     );
+    totals.mcp = (state.mcpServers || []).reduce((a, m) => a + (m.tokens || 0), 0);
     return json(res, 200, {
       skills,
       clusters: state.clusters || [],
@@ -109,6 +122,46 @@ const handle = async (req, res) => {
       proposals: state.proposals || {},
       totals,
     });
+  }
+
+  if (pathname === '/api/skills' && req.method === 'POST') {
+    let payload;
+    try { payload = await readBody(req); } catch { return json(res, 400, { error: 'invalid JSON' }); }
+    const name = String(payload.name || '').trim();
+    const description = String(payload.description || '').trim();
+    const body = String(payload.body || '').trim();
+    const tagsArr = Array.isArray(payload.tags)
+      ? payload.tags.map((t) => String(t).trim()).filter(Boolean)
+      : [];
+
+    // Slug: lowercase, alphanumeric + hyphens. Mirrors the Claude Code
+    // convention for skill directory names.
+    if (!/^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$/.test(name)) {
+      return json(res, 400, { error: 'name must be 3–60 chars, lowercase, alphanumeric + hyphens, no leading/trailing hyphen' });
+    }
+    if (description.length < 5) {
+      return json(res, 400, { error: 'description is required (≥5 chars)' });
+    }
+
+    const skillsRoot = userSkillsDir();
+    const targetDir = path.join(skillsRoot, name);
+    if (fs.existsSync(targetDir)) {
+      return json(res, 409, { error: `skill already exists at ${targetDir}` });
+    }
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    const fmLines = [`name: ${name}`, `description: ${description}`];
+    if (tagsArr.length) fmLines.push(`tags: ${tagsArr.join(', ')}`);
+    const fmBlock = `---\n${fmLines.join('\n')}\n---\n`;
+    const bodyBlock = body || `# ${name}\n\n<!-- Write the skill content here. -->\n`;
+    fs.writeFileSync(path.join(targetDir, 'SKILL.md'), fmBlock + bodyBlock);
+    await refreshSnapshot();
+    return json(res, 201, { ok: true, name, dir: targetDir });
+  }
+
+  if (pathname === '/api/refresh' && req.method === 'POST') {
+    await refreshSnapshot();
+    return json(res, 200, { ok: true });
   }
 
   const skillMatch = pathname.match(/^\/api\/skills\/([^/]+)$/);
@@ -153,6 +206,7 @@ const handle = async (req, res) => {
         next.frontmatter = { ...live.frontmatter, ...payload.frontmatter };
       }
       writeSkill(next);
+      await refreshSnapshot();
       return json(res, 200, { ok: true });
     }
 
@@ -162,6 +216,7 @@ const handle = async (req, res) => {
       }
       const backupPath = backup(cached.dir, 'dashboard-delete');
       fs.rmSync(cached.dir, { recursive: true, force: true });
+      await refreshSnapshot();
       return json(res, 200, { ok: true, backup: backupPath });
     }
 
