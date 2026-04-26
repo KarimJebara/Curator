@@ -6,6 +6,7 @@ import { reportsDir, userSkillsDir } from '../lib/paths.js';
 import { readSkill, writeSkill } from '../lib/skill-parser.js';
 import { backup } from '../lib/backup.js';
 import { analyzeOverlap } from '../detectors/cluster-overlap.js';
+import { renameSkill } from '../apply/rename.js';
 import { scan } from './scan.js';
 
 // Run a quick deterministic re-scan after any mutation so /api/state reflects
@@ -172,6 +173,33 @@ const handle = async (req, res) => {
   if (pathname === '/api/refresh' && req.method === 'POST') {
     await refreshSnapshot();
     return json(res, 200, { ok: true });
+  }
+
+  const renameMatch = pathname.match(/^\/api\/skills\/([^/]+)\/rename$/);
+  if (renameMatch && req.method === 'POST') {
+    const oldName = decodeURIComponent(renameMatch[1]);
+    const state = loadState();
+    const cached = findSkill(state, oldName);
+    if (!cached) return json(res, 404, { error: `skill not found: ${oldName}` });
+    if (!isEditable(cached.dir)) {
+      return json(res, 403, { error: 'plugin-installed skills are read-only' });
+    }
+    let payload;
+    try { payload = await readBody(req); } catch { return json(res, 400, { error: 'invalid JSON' }); }
+    const newName = String(payload.newName || '').trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$/.test(newName)) {
+      return json(res, 400, { error: 'newName must be 3–60 chars, lowercase, alphanumeric + hyphens, no leading/trailing hyphen' });
+    }
+    if (newName === oldName) {
+      return json(res, 200, { ok: true, name: newName, dir: cached.dir });
+    }
+    try {
+      const r = renameSkill(cached.dir, newName);
+      await refreshSnapshot();
+      return json(res, 200, { ok: true, name: newName, dir: r.to, backup: r.backup });
+    } catch (err) {
+      return json(res, 409, { error: err.message });
+    }
   }
 
   const skillMatch = pathname.match(/^\/api\/skills\/([^/]+)$/);

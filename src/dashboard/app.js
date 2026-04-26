@@ -236,6 +236,7 @@ const renderSkillDetail = () => {
         class: 'btn',
         onclick: () => { state.editing = true; renderSkillDetail(); },
       }, 'Edit'));
+      toolbar.appendChild(el('button', { class: 'btn', onclick: () => renameSkillPrompt(s) }, 'Rename'));
       toolbar.appendChild(el('button', { class: 'btn danger', onclick: deleteSelected }, 'Delete'));
       toolbar.appendChild(el('button', {
         class: 'btn',
@@ -251,6 +252,12 @@ const renderSkillDetail = () => {
   inner.appendChild(toolbar);
 
   if (state.editing) {
+    inner.appendChild(el('label', { class: 'edit-label' }, 'Description (eager — every session)'));
+    const descInput = el('input', { type: 'text', class: 'desc-edit', id: 'descEdit' });
+    descInput.value = s.description || '';
+    inner.appendChild(descInput);
+
+    inner.appendChild(el('label', { class: 'edit-label' }, 'Body (lazy — only when invoked)'));
     const ta = el('textarea', { class: 'body-edit', id: 'bodyEdit' });
     ta.value = s.body || '';
     inner.appendChild(ta);
@@ -903,13 +910,29 @@ const selectSkill = async (name) => {
 const saveEdits = async () => {
   if (!state.selected) return;
   const body = $('#bodyEdit').value;
+  const description = $('#descEdit').value.trim();
   try {
     await api(`/api/skills/${encodeURIComponent(state.selected.name)}`, {
-      method: 'PUT', body: JSON.stringify({ body }),
+      method: 'PUT',
+      body: JSON.stringify({ body, frontmatter: { description } }),
     });
     state.selected.body = body;
+    state.selected.description = description;
+    if (state.selected.frontmatter) state.selected.frontmatter.description = description;
     state.editing = false;
     renderSkillDetail();
+    // Description changes affect eager token cost + topic detection — refresh
+    // state so the donut + sidebar update.
+    const data = await api('/api/state');
+    Object.assign(state, {
+      skills: data.skills,
+      topics: data.topics,
+      clusters: data.clusters,
+      mcpServers: data.mcpServers || [],
+      totals: data.totals || state.totals,
+    });
+    renderSidebar();
+    renderList();
     toast('Saved (backup created in ~/.claude/curator/backups)');
   } catch (e) { toast(e.message, 'error'); }
 };
@@ -926,6 +949,38 @@ const deleteSelected = async () => {
     renderList();
     renderDetail();
     toast(`Deleted ${name}`);
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+const renameSkillPrompt = async (skill) => {
+  const oldName = skill.name;
+  const newName = prompt(
+    `Rename "${oldName}" to:\n\n` +
+    `(lowercase, alphanumeric + hyphens, e.g. "my-new-skill"). ` +
+    `Backup created in ~/.claude/curator/backups/ first.`,
+    oldName,
+  );
+  if (!newName || newName === oldName) return;
+  const norm = newName.trim().toLowerCase();
+  try {
+    const r = await api(`/api/skills/${encodeURIComponent(oldName)}/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ newName: norm }),
+    });
+    toast(`Renamed → ${r.name}`);
+    const data = await api('/api/state');
+    Object.assign(state, {
+      skills: data.skills,
+      topics: data.topics,
+      clusters: data.clusters,
+      mcpServers: data.mcpServers || [],
+      totals: data.totals || state.totals,
+    });
+    const fresh = await api(`/api/skills/${encodeURIComponent(r.name)}`);
+    state.selected = fresh;
+    renderSidebar();
+    renderList();
+    renderDetail();
   } catch (e) { toast(e.message, 'error'); }
 };
 

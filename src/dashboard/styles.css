@@ -240,6 +240,22 @@ textarea.body-edit, .body-view {
 textarea.body-edit { resize: vertical; }
 textarea.body-edit:focus { outline: none; border-color: var(--accent); }
 
+.edit-label {
+  display: block;
+  font-size: 11.5px; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--text-faint); font-weight: 600;
+  margin: 12px 0 6px;
+}
+.desc-edit {
+  width: 100%;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 14px;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin-bottom: 4px;
+}
+.desc-edit:focus { outline: none; border-color: var(--accent); }
+
 /* ─── Overview: hero ───────────────────────────────── */
 .hero {
   position: relative;
