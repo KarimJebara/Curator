@@ -144,7 +144,7 @@ const renderList = () => {
   const totalLazy = list.reduce((a, s) => a + (s.lazyTokens || 0), 0);
   const maxTokens = Math.max(1, ...list.map((s) => s.lazyTokens || 0));
   $('#listHeader').textContent = headerLabel();
-  $('#listSubheader').textContent = `${list.length} · ${fmt(totalEager)} eager · ${fmt(totalLazy)} lazy`;
+  $('#listSubheader').textContent = `${list.length} · ${fmt(totalEager)} always · ${fmt(totalLazy)} on use`;
 
   const ul = $('#skillList');
   ul.innerHTML = '';
@@ -160,12 +160,12 @@ const renderList = () => {
       el('div', { class: 'meta' },
         el('span', {
           class: `badge ${s.eagerGrade || ''}`,
-          title: 'Eager — description tokens, always loaded',
-        }, `${fmt(s.eagerTokens)}e`),
+          title: 'Description size — loaded into Claude on every session',
+        }, `${fmt(s.eagerTokens)} always`),
         el('span', {
           class: `badge ${s.grade || ''}`,
-          title: 'Lazy — body tokens, loaded only on invocation',
-        }, `${fmt(s.lazyTokens)}L`),
+          title: 'Body size — loaded only when this skill fires',
+        }, `${fmt(s.lazyTokens)} on use`),
         el('div', { class: 'token-bar' }, el('span', { style: `width: ${tokenPct}%` })),
         s.editable ? null : el('span', { class: 'badge readonly' }, 'plugin'),
       ),
@@ -190,12 +190,12 @@ const renderSkillDetail = () => {
     el('h1', {}, s.name),
     el('span', {
       class: `badge ${s.eagerGrade || ''}`,
-      title: 'Eager — description tokens, always loaded',
-    }, `${fmt(s.eagerTokens)} eager`),
+      title: 'Description size — loaded into Claude on every session',
+    }, `${fmt(s.eagerTokens)} always loaded`),
     el('span', {
       class: `badge ${s.grade || ''}`,
-      title: 'Lazy — body tokens, loaded only when this skill fires',
-    }, `${fmt(s.lazyTokens)} lazy`),
+      title: 'Body size — loaded only when this skill fires',
+    }, `${fmt(s.lazyTokens)} on use`),
     s.editable ? null : el('span', { class: 'badge readonly' }, 'read-only · plugin'),
   );
   inner.appendChild(head);
@@ -252,12 +252,12 @@ const renderSkillDetail = () => {
   inner.appendChild(toolbar);
 
   if (state.editing) {
-    inner.appendChild(el('label', { class: 'edit-label' }, 'Description (eager — every session)'));
+    inner.appendChild(el('label', { class: 'edit-label' }, 'Description — loaded into Claude every session, even when this skill never fires'));
     const descInput = el('input', { type: 'text', class: 'desc-edit', id: 'descEdit' });
     descInput.value = s.description || '';
     inner.appendChild(descInput);
 
-    inner.appendChild(el('label', { class: 'edit-label' }, 'Body (lazy — only when invoked)'));
+    inner.appendChild(el('label', { class: 'edit-label' }, 'Body — only loaded when this skill actually fires'));
     const ta = el('textarea', { class: 'body-edit', id: 'bodyEdit' });
     ta.value = s.body || '';
     inner.appendChild(ta);
@@ -284,14 +284,14 @@ const renderOverview = () => {
   const hero = el('section', { class: 'hero' },
     el('h1', {}, 'Your skill library at a glance'),
     el('div', { class: 'hero-sub' },
-      `${state.skills.length} skills loading ${fmt(eagerTotal)} description tokens into the autorouter before you've typed a single prompt. ` +
-      `${fmt(lazyTotal)} more sit in skill bodies, ready to land if invoked. ` +
+      `${state.skills.length} skills. About ${fmt(eagerTotal)} tokens of skill descriptions are loaded into Claude on every session — paid whether you use the skill or not. ` +
+      `Another ${fmt(lazyTotal)} tokens of skill bodies sit on disk and only load when a skill actually fires. ` +
       `Pick a topic, cluster, or skill from the left — or scan the highlights below.`),
     el('div', { class: 'hero-stats' },
       stat('Skills', state.skills.length, `${editableCount} editable`),
       stat('Topics', state.topics.length, 'tag-based browsers'),
-      stat('Eager tok', fmt(eagerTotal), 'always loaded'),
-      stat('Lazy tok', fmt(lazyTotal), 'on invocation'),
+      stat('Always loaded', fmt(eagerTotal), 'tokens · every session'),
+      stat('On use', fmt(lazyTotal), 'tokens · only when invoked'),
     ),
   );
   inner.appendChild(hero);
@@ -307,7 +307,7 @@ const renderOverview = () => {
         el('div', { class: 'body' },
           el('div', { class: 'title' }, `Your MCP servers cost ${ratio.toFixed(1)}× more than your skill descriptions`),
           el('div', { class: 'detail' },
-            `${fmt(state.totals.mcp)} tokens of MCP tool envelopes vs ${fmt(state.totals.eager)} tokens of skill descriptions, both loaded every session. ` +
+            `${fmt(state.totals.mcp)} tokens for MCP tool definitions vs ${fmt(state.totals.eager)} tokens for skill descriptions — both loaded into Claude on every session. ` +
             `Trimming MCP servers you don't actually use is the highest-leverage cleanup.`,
           ),
         ),
@@ -321,12 +321,12 @@ const renderOverview = () => {
   const maxEager = Math.max(1, ...heaviestEager.map((s) => s.eagerTokens || 0));
   const maxLazy = Math.max(1, ...heaviestLazy.map((s) => s.lazyTokens || 0));
   inner.appendChild(el('div', { class: 'grid two' },
-    card('Heaviest descriptions', 'eager — always loaded',
+    card('Heaviest descriptions', 'always loaded — paid every session',
       el('div', {},
         ...heaviestEager.map((s) => barRow(s.name, s.eagerTokens || 0, maxEager, () => selectSkill(s.name))),
       ),
     ),
-    card('Heaviest bodies', 'lazy — load on invocation',
+    card('Heaviest bodies', 'on use — paid only when the skill fires',
       el('div', {},
         ...heaviestLazy.map((s) => barRow(s.name, s.lazyTokens || 0, maxLazy, () => selectSkill(s.name))),
       ),
@@ -335,7 +335,7 @@ const renderOverview = () => {
 
   // Row 1b: Grade donut
   inner.appendChild(el('div', { class: 'grid' },
-    card('Quality breakdown', 'body-token grade distribution (lazy weight)', renderDonut()),
+    card('Quality breakdown', 'graded by body size (paid only when a skill fires)', renderDonut()),
   ));
 
   // Row 2: Topics cloud + Cluster cards + MCP
@@ -844,9 +844,9 @@ const renderMcpDetail = () => {
     ),
   ));
 
-  inner.appendChild(card('Token cost', 'estimate of always-loaded weight',
+  inner.appendChild(card('Token cost', 'always loaded — paid every session',
     el('div', { style: 'font-size: 13px; line-height: 1.7' },
-      el('div', {}, `Eager (loaded every session): ${fmt(m.tokens)} tokens`),
+      el('div', {}, `Loaded into Claude on every session: ${fmt(m.tokens)} tokens`),
       el('div', { style: 'color: var(--text-muted)' },
         'Note: this is a conservative envelope estimate. The real cost equals the server\'s tool definitions, which we don\'t probe live yet.',
       ),

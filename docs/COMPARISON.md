@@ -13,7 +13,7 @@ Honest, named comparison. If a tool below does something `curator` doesn't, we s
 | **Silhouette-scored clustering** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **Cluster overlap visualization** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **Per-skill unique-vocab analysis** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Eager vs lazy token grading** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| **Always-loaded vs on-use token grading** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | Detects duplicate MCP servers | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Detects orphan files | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Token-cost grading per skill/MCP | ✓ | partial | ✗ | ✓ | ✗ | ✓ | ✓ | partial |
@@ -28,7 +28,7 @@ Honest, named comparison. If a tool below does something `curator` doesn't, we s
 1. **Open-source local web dashboard.** The only one in the OSS category — `claudetoolkit` is the only other dashboard and it's commercial / closed-source / desktop. Curator is a local Node http server (no Electron, no install), opens at `127.0.0.1:4711` in any browser.
 2. **Silhouette-scored clustering with confidence tiers.** Ward-linkage hierarchical clustering on TF-IDF + bigrams + IDF. Each cluster gets a high (≥0.28) / medium (0.18–0.28) / low (<0.18) confidence badge so you know how much to trust the grouping before deleting anything.
 3. **Cluster overlap analysis.** Click into any cluster to see (a) what its members share, (b) what each one *uniquely* knows, (c) pairwise cosine TF-IDF similarity. Skills with no unique vocabulary are flagged as likely duplicates.
-4. **Eager vs lazy token cost split.** Skill descriptions are loaded into the autorouter every session (eager — always paid). Bodies load only on invocation (lazy — paid on invocation). Two separate grades. Most token-cost tools conflate the two.
+4. **Always-loaded vs on-use token cost split.** Skill descriptions are loaded into Claude every session — paid whether you use the skill or not. Skill bodies load only when the Skill tool actually fires. Two separate grades. Most token-cost tools conflate the two.
 5. **Scheduled weekly audit** — `curator schedule install` drops a weekly cron entry that re-snapshots your library. Snapshot lives in the dashboard, not in your inbox.
 
 ## Advanced: LLM-driven specialization (opt-in)

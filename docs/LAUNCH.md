@@ -2,8 +2,9 @@
 
 This file collects the "what it does" pitch and launch-post drafts so they can
 be iterated outside the README. Numbers come from a real scan of the author's
-`~/.claude/` (96 skills, ~3.6k eager tokens always loaded, 243k lazy tokens
-on-disk), not invented placeholders.
+`~/.claude/` (96 skills, ~3.6k tokens of skill descriptions loaded into Claude
+on every session, 243k tokens of skill bodies sitting on disk waiting to be
+invoked), not invented placeholders.
 
 ---
 
@@ -12,25 +13,25 @@ on-disk), not invented placeholders.
 `curator` is an **open-source local web dashboard** for managing the skills
 and MCP servers in your Claude Code setup. Run `curator scan` (deterministic,
 ~3 seconds, no API key) and `curator dashboard` opens at
-`http://127.0.0.1:4711`. You see your library at a glance — eager vs lazy
-token cost, grade distribution, top-heaviest descriptions, top-heaviest
-bodies, MCP servers, topic chips, cluster cards. Click into any
-silhouette-scored cluster to see what its members share, what each member
-*uniquely* knows, and pairwise similarity — duplicates with no unique
-vocabulary are flagged. Click any user-owned skill to view, edit, or delete
-it; every change is backed up to `~/.claude/curator/backups/` first.
-Plugin-installed skills are read-only. No login. No API key required. MIT
-licensed. An optional `--rewrite` flag opts into a 5-stage LLM pipeline that
-proposes specializations + a router skill, but that's a power-user mode, not
-the headline.
+`http://127.0.0.1:4711`. You see your library at a glance — how many tokens
+load into Claude on every session vs how many sit on disk waiting to fire,
+the grade distribution, top-heaviest descriptions, top-heaviest bodies, MCP
+servers, topic chips, cluster cards. Click into any silhouette-scored cluster
+to see what its members share, what each member *uniquely* knows, and
+pairwise similarity — duplicates with no unique vocabulary are flagged. Click
+any user-owned skill to view, edit, or delete it; every change is backed up
+to `~/.claude/curator/backups/` first. Plugin-installed skills are read-only.
+No login. No API key required. MIT licensed. An optional `--rewrite` flag
+opts into a 5-stage LLM pipeline that proposes specializations + a router
+skill, but that's a power-user mode, not the headline.
 
 ---
 
 ## What curator does (in three bullets)
 
-- **See your library** in a local browser dashboard — total skills, eager
-  vs lazy token cost, grade distribution, heaviest descriptions, heaviest
-  bodies, topic chips, cluster cards.
+- **See your library** in a local browser dashboard — total skills,
+  always-loaded vs on-use token cost, grade distribution, heaviest
+  descriptions, heaviest bodies, topic chips, cluster cards.
 - **Spot redundancy** with silhouette-scored clusters. Click into any
   cluster: shared core vocabulary, per-skill unique vocabulary, pairwise
   similarity. Duplicates are flagged automatically.
@@ -132,7 +133,7 @@ gives credit, and signals where this is going.
 >   dashboards, audit logs) for organizations with shared `~/.claude/`
 >   setups. Sign up if interested: `<signup link TBD>`.
 > - Cluster confidence thresholds, the duplicate-detection heuristic,
->   and the eager/lazy split are all places where I want feedback.
+>   and the always-loaded vs on-use split are all places where I want feedback.
 >   PRs welcome.
 
 ---
@@ -172,15 +173,15 @@ From a real scan of the author's library:
 | Metric | Value |
 |---|---:|
 | Total skills | 96 |
-| Eager tokens (descriptions, always loaded) | 3,639 |
-| Lazy tokens (bodies, loaded on invocation) | 243,475 |
+| Always-loaded tokens (skill descriptions, every session) | 3,639 |
+| On-use tokens (skill bodies, only when invoked) | 243,475 |
 | Grade distribution | 63 F · 24 D · 7 C · 2 B · 0 A |
 | Topics auto-detected | 29 |
 | Clusters detected | 19 |
 | MCP servers | 22 (0 duplicate groups) |
 | Default scan time | ~3 seconds |
 
-The 3,639-token eager number is what's actually in the autorouter context
-on every session. The 243k figure is the *potential* on-invocation cost,
-not the always-on cost. Lead with the eager number — it's the smaller,
-more accurate, more honest framing.
+The 3,639-token "always loaded" number is what's actually in the autorouter
+context on every session. The 243k figure is the *potential* on-invocation
+cost, not the always-on cost. Lead with the always-loaded number — it's the
+smaller, more accurate, more honest framing.

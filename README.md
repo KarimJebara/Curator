@@ -10,7 +10,7 @@
 
 `curator` runs a local web dashboard at `http://127.0.0.1:4711` so you can actually see what's in your `~/.claude/`.
 
-- **At-a-glance overview** — total skills, eager vs lazy token cost, grade distribution, top-heaviest descriptions, top-heaviest bodies, MCP servers.
+- **At-a-glance overview** — total skills, always-loaded vs on-use token cost, grade distribution, top-heaviest descriptions, top-heaviest bodies, MCP servers.
 - **Cluster overlap analysis** — silhouette-scored hierarchical clustering surfaces overlapping skills. Click any cluster to see shared core vocabulary, per-skill unique vocabulary, and pairwise similarity. Members with no unique vocabulary are flagged as likely duplicates.
 - **Topic browsing** — auto-detected tag groupings (`kotlin`, `testing`, `frontend`, …) in the sidebar. A skill can belong to several.
 - **Edit and delete in place** — click a user-owned skill, edit the body, save. Or delete it. Plugin-installed skills are read-only.
@@ -50,14 +50,14 @@ A single `curator scan` produces two views of your library:
 
 **Topics** — tag-based groupings detected from skill names, descriptions, and a known-vocabulary scan. A skill can belong to multiple topics. Surfaced in the dashboard sidebar.
 
-## Eager vs lazy token cost
+## Always-loaded vs on-use token cost
 
-A subtlety the dashboard makes explicit:
+Two different cost categories the dashboard separates:
 
-- **Eager** — skill descriptions are loaded into the autorouter's context **every session**, even if you never invoke that skill. This is the "cost before first prompt" and is usually 30–100 tokens per skill.
-- **Lazy** — skill bodies are loaded **only when the Skill tool actually fires** for that skill. Usually 200–6,000 tokens.
+- **Always loaded** — the `description:` line at the top of every SKILL.md is loaded into Claude on **every session**, so the autorouter can decide which skill to invoke. You pay this whether you ever use the skill or not. Usually 30–100 tokens per skill.
+- **On use** — the body of the skill (everything below the frontmatter) loads **only when the Skill tool actually fires** for that skill. Usually 200–6,000 tokens.
 
-Both are graded separately. Bloated descriptions hurt every session; bloated bodies only hurt the sessions where they fire.
+Both are graded separately because the rules are different. A bloated description hurts every session forever — that's the kind to trim aggressively. A bloated body only hurts the sessions where the skill actually fires, so depth there is fine if it pays off when triggered.
 
 ## Advanced: LLM-driven rewriting (opt-in)
 
@@ -88,7 +88,7 @@ This is a power-user mode, not the headline. The dashboard alone is the headline
 ## Roadmap
 
 **v0.1 (now)**
-- Local web dashboard, cluster overlap analysis, eager-vs-lazy token grading
+- Local web dashboard, cluster overlap analysis, always-loaded vs on-use token grading
 - MCP duplicate + token-cost detection, orphan & drift flagging
 - Weekly cron snapshot
 - Optional `--rewrite` LLM pipeline
