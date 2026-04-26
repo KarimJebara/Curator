@@ -49,15 +49,48 @@ const isUsefulTag = (t) => {
   return KNOWN_TAGS.has(t);
 };
 
+// Validate an explicitly-authored tag. Looser than isUsefulTag — we trust
+// what the user wrote in frontmatter, only rejecting obvious noise (stop
+// words, things that are too short, or symbols).
+const isValidExplicitTag = (t) => {
+  if (!t) return false;
+  if (t.length < 2 || t.length > 31) return false;
+  if (STOP_TAGS.has(t)) return false;
+  return /^[a-z][a-z0-9-]*$/.test(t);
+};
+
 // Pull tags from a single skill, no LLM. Returns a Set of strings.
+//
+// Two sources, in priority order:
+//   1. frontmatter.tags — explicitly authored by the user. We trust these
+//      and only filter obvious noise; arbitrary new tags like "convex" are
+//      respected. This is what the dashboard "+ New topic" flow writes.
+//   2. Heuristic extraction from name and description, gated to KNOWN_TAGS.
+//      This catches `kotlin-patterns` → `kotlin` for skills that don't
+//      author tags themselves.
+//
+// Both contribute additively, so an explicit tag list doesn't suppress
+// heuristic tags — a skill named `kotlin-patterns` with frontmatter
+// `tags: convex` ends up with both `kotlin` and `convex`.
 export const extractTags = (skill) => {
   const tags = new Set();
+
+  // Explicit frontmatter tags (the user-driven path)
+  const fmTags = skill.frontmatter?.tags;
+  if (fmTags) {
+    const raw = Array.isArray(fmTags) ? fmTags : String(fmTags).split(/[,\s]+/);
+    for (const t of raw) {
+      const norm = String(t).trim().toLowerCase();
+      if (isValidExplicitTag(norm)) tags.add(norm);
+    }
+  }
+
+  // Heuristic from name (kebab parts → known tags)
   const parts = (skill.name || '').toLowerCase().split(/[-_]+/).filter(Boolean);
   for (const p of parts) {
     if (isUsefulTag(p)) tags.add(p);
   }
-  // Also scan the description for known tags — catches cases where the name
-  // doesn't mention the language but the description does.
+  // Heuristic from description (known tags only, prevents tagging noise)
   const descTokens = (skill.description || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   for (const t of descTokens) {
     if (isUsefulTag(t)) tags.add(t);

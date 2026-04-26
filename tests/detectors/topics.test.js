@@ -55,4 +55,34 @@ export const tests = {
     assert.ok(testing.members.find((m) => m.name === 'kotlin-testing'),
       'kotlin-testing should be in both kotlin AND testing topics');
   },
+
+  'extractTags reads frontmatter.tags (not just name + description)': () => {
+    // Tag name "convex" isn't in KNOWN_TAGS — heuristic extraction would skip
+    // it. But the user wrote it in frontmatter, so it should be respected.
+    const skill = {
+      name: 'my-thing',
+      description: 'something unrelated',
+      frontmatter: { tags: 'convex, react' },
+    };
+    const tags = extractTags(skill);
+    assert.ok(tags.has('convex'), 'explicit frontmatter tag "convex" should be respected');
+    assert.ok(tags.has('react'), 'explicit frontmatter tag "react" should be kept');
+  },
+
+  'explicit-frontmatter topic appears below the minMembers threshold': () => {
+    // Only 1 skill is tagged with the user-authored tag. With pure heuristic
+    // extraction this would be filtered (minMembers=3). With frontmatter
+    // respect, it should appear.
+    const skills = [
+      { name: 'a', description: '', frontmatter: { tags: 'convex' } },
+      fakeSkill('kotlin-patterns'),
+      fakeSkill('python-patterns'),
+      fakeSkill('go-patterns'),
+    ];
+    const topics = buildTopics(skills, { minMembers: 3 });
+    const convex = topics.find((t) => t.tag === 'convex');
+    assert.ok(convex, 'a single-member topic from explicit tags should appear');
+    assert.equal(convex.members.length, 1);
+    assert.equal(convex.explicit, true, 'explicit flag should be set');
+  },
 };
