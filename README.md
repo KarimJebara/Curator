@@ -29,6 +29,17 @@ npm link            # puts `curator` on PATH; one-time setup
 
 `npm link` is optional — you can also run everything as `node bin/curator.js <cmd>`.
 
+### Optional: install as a clickable Mac app
+
+If you want a `Curator.app` you can launch from Spotlight or the Dock instead of running `curator dashboard` from a terminal:
+
+```bash
+bash scripts/build-app.sh
+cp -r dist/Curator.app /Applications/
+```
+
+Clicking the icon opens a Terminal window that runs `curator dashboard`. Closing the Terminal window stops the server. Requires `npm link` first so `curator` is on PATH.
+
 ## Quickstart
 
 ```bash
