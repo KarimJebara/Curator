@@ -1039,6 +1039,38 @@ $('#search').addEventListener('input', (e) => {
   renderList();
 });
 
+const rescan = async () => {
+  const btn = $('#rescanBtn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '↻ Rescanning…';
+  try {
+    await api('/api/refresh', { method: 'POST' });
+    const data = await api('/api/state');
+    Object.assign(state, {
+      skills: data.skills,
+      topics: data.topics,
+      clusters: data.clusters,
+      mcpServers: data.mcpServers || [],
+      totals: data.totals || state.totals,
+    });
+    if (state.selected) {
+      const fresh = state.skills.find((s) => s.name === state.selected.name);
+      state.selected = fresh ? { ...state.selected, ...fresh } : null;
+    }
+    renderSidebar();
+    renderList();
+    renderDetail();
+    toast('Rescan complete');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+};
+
+$('#rescanBtn').addEventListener('click', rescan);
 $('#newSkillBtn').addEventListener('click', openNewSkillModal);
 $('#modalCloseBtn').addEventListener('click', closeModal);
 $('#modalCancelBtn').addEventListener('click', closeModal);
