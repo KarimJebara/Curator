@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { reportsDir, userSkillsDir } from '../lib/paths.js';
+import { editableSkillRoots, reportsDir, userSkillsDir } from '../lib/paths.js';
 import { readSkill, writeSkill } from '../lib/skill-parser.js';
 import { backup } from '../lib/backup.js';
 import { analyzeOverlap } from '../detectors/cluster-overlap.js';
@@ -65,12 +65,11 @@ const findSkill = (state, name) => {
   return hit;
 };
 
-// Only allow edits inside the user's ~/.claude/skills tree. Plugin-installed
-// skills (~/.claude/plugins/...) are read-only because rewriting them gets
-// blown away by the next plugin update.
+// Only allow edits inside user-owned skill trees. Plugin-installed skills are
+// read-only because rewriting them gets blown away by the next plugin update.
 const isEditable = (skillDir) => {
-  const root = userSkillsDir();
-  return skillDir.startsWith(root + path.sep) || skillDir === root;
+  const roots = editableSkillRoots();
+  return roots.some((root) => skillDir.startsWith(root + path.sep) || skillDir === root);
 };
 
 const serveStatic = (req, res) => {

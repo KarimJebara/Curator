@@ -8,7 +8,7 @@
 
 ## What it does
 
-`curator` runs a local web dashboard at `http://127.0.0.1:4711` so you can actually see what's in your `~/.claude/`.
+`curator` runs a local web dashboard at `http://127.0.0.1:4711` so you can actually see what's in your skill and MCP setup.
 
 - **At-a-glance overview** — total skills, always-loaded vs on-use token cost, grade distribution, top-heaviest descriptions, top-heaviest bodies, MCP servers.
 - **Cluster overlap analysis** — silhouette-scored hierarchical clustering surfaces overlapping skills. Click any cluster to see shared core vocabulary, per-skill unique vocabulary, and pairwise similarity. Members with no unique vocabulary are flagged as likely duplicates.
@@ -17,6 +17,19 @@
 - **Backups before every change** — written to `~/.claude/curator/backups/`. Every edit and delete is reversible.
 
 Nothing auto-applies. You decide what to keep.
+
+By default, skill scans include:
+
+- `~/.claude/skills`
+- `~/.claude/plugins`
+- `~/.agents/skills`
+- `.agents/skills` in the current workspace and its parents
+
+To scan additional workspace-local skill libraries, pass a path list with your shell's path separator:
+
+```bash
+CURATOR_EXTRA_SKILLS_DIRS=/path/to/project/.agents/skills curator scan
+```
 
 ## Install
 
