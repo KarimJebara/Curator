@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { userSkillsDir, userPluginsDir } from '../lib/paths.js';
+import { skillRoots } from '../lib/paths.js';
 import { readSkill } from '../lib/skill-parser.js';
 import { estimateTokens, grade, gradeEager } from '../lib/tokens.js';
 
@@ -24,8 +24,8 @@ const walkSkillDirs = (root) => {
   return out;
 };
 
-export const collectSkills = ({ extraRoots = [], rootsOnly } = {}) => {
-  const roots = rootsOnly ? rootsOnly : [userSkillsDir(), userPluginsDir(), ...extraRoots];
+export const collectSkills = ({ extraRoots = [], rootsOnly, cwd } = {}) => {
+  const roots = rootsOnly ? rootsOnly : skillRoots({ cwd, extraRoots });
   const dirs = roots.flatMap(walkSkillDirs);
   const seen = new Set();
   const skills = [];

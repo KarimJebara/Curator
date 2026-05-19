@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectSkills } from '../../src/detectors/skills.js';
 import { clusterSkills } from '../../src/detectors/cluster.js';
+import { skillRoots } from '../../src/lib/paths.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = path.join(__dirname, '..', 'fixtures', '5-frontend-skills');
@@ -53,6 +56,42 @@ export const tests = {
     for (const s of skills) {
       assert.ok(s.tokens > 0, `${s.name} should have tokens`);
       assert.ok(['A', 'B', 'C', 'D', 'F'].includes(s.grade));
+    }
+  },
+
+  'skillRoots includes OpenCode user and workspace skill dirs': () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'curator-roots-'));
+    const previousUserSkillsDir = process.env.CURATOR_USER_SKILLS_DIR;
+    try {
+      delete process.env.CURATOR_USER_SKILLS_DIR;
+      const roots = skillRoots({ cwd: path.join(tmp, 'project', 'nested') });
+      assert.ok(roots.includes(path.join(os.homedir(), '.agents', 'skills')));
+      assert.ok(roots.includes(path.join(tmp, 'project', 'nested', '.agents', 'skills')));
+      assert.ok(roots.includes(path.join(tmp, 'project', '.agents', 'skills')));
+      assert.ok(roots.includes(path.join(tmp, '.agents', 'skills')));
+    } finally {
+      if (previousUserSkillsDir === undefined) delete process.env.CURATOR_USER_SKILLS_DIR;
+      else process.env.CURATOR_USER_SKILLS_DIR = previousUserSkillsDir;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  },
+
+  'skillRoots includes extra skill roots from env path list': () => {
+    const previous = process.env.CURATOR_EXTRA_SKILLS_DIRS;
+    const previousUserSkillsDir = process.env.CURATOR_USER_SKILLS_DIR;
+    const first = path.join(os.tmpdir(), 'curator-extra-one');
+    const second = path.join(os.tmpdir(), 'curator-extra-two');
+    try {
+      delete process.env.CURATOR_USER_SKILLS_DIR;
+      process.env.CURATOR_EXTRA_SKILLS_DIRS = [first, second].join(path.delimiter);
+      const roots = skillRoots({ cwd: process.cwd() });
+      assert.ok(roots.includes(first));
+      assert.ok(roots.includes(second));
+    } finally {
+      if (previous === undefined) delete process.env.CURATOR_EXTRA_SKILLS_DIRS;
+      else process.env.CURATOR_EXTRA_SKILLS_DIRS = previous;
+      if (previousUserSkillsDir === undefined) delete process.env.CURATOR_USER_SKILLS_DIR;
+      else process.env.CURATOR_USER_SKILLS_DIR = previousUserSkillsDir;
     }
   },
 };
