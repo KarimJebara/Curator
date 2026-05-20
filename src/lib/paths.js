@@ -34,6 +34,19 @@ export const workspaceAgentSkillsDirs = (cwd = process.cwd()) => {
   return dirs;
 };
 
+export const workspaceClaudeSkillsDirs = (cwd = process.cwd()) => {
+  const dirs = [];
+  let current = path.resolve(cwd);
+  while (true) {
+    const candidate = path.join(current, '.claude', 'skills');
+    if (candidate !== userSkillsDir()) dirs.push(candidate);
+    const parent = path.dirname(current);
+    if (parent === current || current === HOME) break;
+    current = parent;
+  }
+  return dirs;
+};
+
 export const extraSkillRoots = () => [
   ...splitPathList(process.env.CURATOR_EXTRA_SKILLS_DIRS),
   ...splitPathList(process.env.CURATOR_WORKSPACE_SKILLS_DIR),
@@ -48,6 +61,7 @@ export const skillRoots = ({ cwd = process.cwd(), extraRoots = [] } = {}) => {
     userPluginsDir(),
     userAgentSkillsDir(),
     ...workspaceAgentSkillsDirs(cwd),
+    ...workspaceClaudeSkillsDirs(cwd),
     ...extraSkillRoots(),
     ...extraRoots,
   ]);
@@ -57,6 +71,7 @@ export const editableSkillRoots = (opts = {}) => dedupe([
   userSkillsDir(),
   userAgentSkillsDir(),
   ...workspaceAgentSkillsDirs(opts.cwd),
+  ...workspaceClaudeSkillsDirs(opts.cwd),
   ...extraSkillRoots(),
 ]);
 

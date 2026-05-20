@@ -21,12 +21,14 @@ const usage = () => {
   console.log(`curator — turn your skill graveyard into a coherent toolkit
 
 Usage:
-  curator scan [--rewrite] [--quiet] [--project-mcp PATH]
+  curator scan [--rewrite] [--quiet] [--project-mcp PATH] [--workspace PATH]
       Audit your skill library. Detects clusters, topics, MCP duplicates,
       orphans, and version drift. Writes a snapshot to ~/.claude/curator/.
       Defaults to deterministic-only (no LLM calls, no API key, finishes in
       seconds). Pass --rewrite to run the full LLM pipeline that proposes
       specialized renames + a router skill (slow; opt-in for power users).
+      Pass --workspace PATH to include skills from a project's .claude/skills
+      directory (e.g. --workspace ~/projects/myapp).
 
   curator review
       Two-level walkthrough of the latest scan.
@@ -71,6 +73,7 @@ const main = async () => {
         quiet: flags.quiet,
         rewrite: flags.rewrite,
         projectMcp: flags['project-mcp'],
+        workspace: flags.workspace,
       });
       break;
     case 'review':
