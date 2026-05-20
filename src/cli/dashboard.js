@@ -296,11 +296,18 @@ const handle = async (req, res) => {
 };
 
 const openInBrowser = (url) => {
-  const cmd = process.platform === 'darwin' ? 'open'
-    : process.platform === 'win32' ? 'start'
-    : 'xdg-open';
   import('node:child_process').then(({ spawn }) => {
-    spawn(cmd, [url], { detached: true, stdio: 'ignore' }).unref();
+    let child;
+    if (process.platform === 'win32') {
+      // 'start' is a CMD built-in, not an executable — must go through cmd.exe
+      child = spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' });
+    } else if (process.platform === 'darwin') {
+      child = spawn('open', [url], { detached: true, stdio: 'ignore' });
+    } else {
+      child = spawn('xdg-open', [url], { detached: true, stdio: 'ignore' });
+    }
+    child.on('error', () => {}); // prevent ENOENT from becoming an uncaught exception
+    child.unref();
   }).catch(() => {});
 };
 
@@ -320,7 +327,11 @@ export const dashboard = ({ port = 4711, open = true } = {}) => {
       console.error(`Port ${port} is already in use.`);
       console.error(`If a curator dashboard is already running, open ${url} in your browser.`);
       console.error(`Otherwise stop the other process, or pass --port <other> to use a different port.`);
-      console.error(`(macOS quick stop: kill $(lsof -ti:${port}))`);
+      if (process.platform === 'win32') {
+        console.error(`(Windows quick stop: Get-Process -Id (netstat -ano | findstr :${port}).Split()[-1] | Stop-Process -Force)`);
+      } else {
+        console.error(`(quick stop: kill $(lsof -ti:${port}))`);
+      }
       process.exit(1);
     }
     console.error(err);
