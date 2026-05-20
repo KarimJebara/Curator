@@ -13,11 +13,11 @@ import { backend } from '../lib/llm.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export const scan = async ({ quiet = false, rewrite = false, projectMcp } = {}) => {
+export const scan = async ({ quiet = false, rewrite = false, projectMcp, workspace } = {}) => {
   const log = (msg) => { if (!quiet) console.log(msg); };
 
   log('Collecting skills…');
-  const skills = collectSkills();
+  const skills = collectSkills({ cwd: workspace });
   log(`  Found ${skills.length} skills.`);
 
   log('Collecting MCP servers…');
