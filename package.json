@@ -1,6 +1,6 @@
 {
   "name": "@curator/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A curator for your Claude Code skills and MCP servers — turns overlapping skills into specialists plus a router.",
   "main": "src/index.js",
   "type": "module",
