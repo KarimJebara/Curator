@@ -10,3 +10,4 @@ dist/
 
 # Demo recording temp dir (the .gif itself is committed)
 docs/media/.tmp/
+.observer.lock
