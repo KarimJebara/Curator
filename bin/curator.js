@@ -10,8 +10,8 @@ import { dashboard } from '../src/cli/dashboard.js';
 import { installCron, uninstallCron, isInstalled } from '../src/schedule/install.js';
 import { reportsDir } from '../src/lib/paths.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const binPath = path.resolve(__filename);
+const __curatorBin = fileURLToPath(import.meta.url);
+const binPath = path.resolve(__curatorBin);
 
 const argv = process.argv.slice(2);
 const cmd = argv[0];

@@ -19,9 +19,9 @@ const refreshSnapshot = async () => {
   return refreshing;
 };
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ASSETS = path.resolve(__dirname, '..', 'dashboard');
+const __dashboardFile = fileURLToPath(import.meta.url);
+const __dashboardDir = path.dirname(__dashboardFile);
+const ASSETS = path.resolve(__dashboardDir, '..', 'dashboard');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
